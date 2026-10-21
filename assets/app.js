@@ -33,16 +33,17 @@
     toast(lg ? '글자를 크게 했어요' : '기본 글자 크기');
   }));
 
-  // ── 2. 검색 (초성 지원) ──
-  const CHO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ';
-  const cho = (s) => [...s].map((c) => { const k = c.charCodeAt(0) - 0xac00; return k >= 0 && k < 11172 ? CHO[Math.floor(k / 588)] : c; }).join('');
+  // ── 2. 검색 (초성·별칭·오타 보정·한/영 자판 실수) — 로직은 search.js ──
+  const ICONS = window.AC_ICONS || {};
   const dlg = $('search'), q = $('q'), qr = $('qr');
   let sel = 0, hits = [];
   const renderHits = () => {
-    const t = q.value.trim().replace(/\s+/g, '').toLowerCase();
-    hits = !t ? INDEX.slice() : INDEX.filter((x) => { const hay = (x.n + x.l).replace(/\s+/g, '').toLowerCase(); return hay.includes(t) || cho(hay).includes(t); });
+    const r = window.CalcSearch ? CalcSearch.search(INDEX, q.value) : { hits: INDEX.slice(), fuzzy: false, via: '' };
+    hits = r.hits;
     sel = Math.min(sel, Math.max(0, hits.length - 1));
-    qr.innerHTML = hits.length ? hits.map((x, i) => `<li role="option" aria-selected="${i === sel}" data-tone="${x.t}"><a href="/${x.s}/"><span class="tic"><svg class="ic" viewBox="0 0 24 24">${(qs(`.tile[href="/${x.s}/"] svg`) || {}).innerHTML || ''}</svg></span><span class="tt"><b>${x.n}</b><small>${x.l}</small></span></a></li>`).join('') : '<li class="empty">맞는 계산기가 없어요. 다른 말로 찾아보세요.</li>';
+    const head = !hits.length ? '' : r.via === 'qwerty' ? '<li class="sug" role="presentation">한/영 전환이 안 된 것 같아요. 이 계산기를 찾으셨나요?</li>'
+      : r.fuzzy ? '<li class="sug" role="presentation">정확히 맞는 이름은 없어요. 혹시 이 계산기를 찾으셨나요?</li>' : '';
+    qr.innerHTML = hits.length ? head + hits.map((x, i) => `<li role="option" aria-selected="${i === sel}" data-tone="${x.t}"><a href="/${x.s}/"><span class="tic"><svg class="ic" viewBox="0 0 24 24">${ICONS[x.i] || ''}</svg></span><span class="tt"><b>${x.n}</b><small>${x.l}</small></span></a></li>`).join('') : '<li class="empty">맞는 계산기가 없어요. 다른 말로 찾아보세요.</li>';
   };
   const openSearch = () => { if (!dlg) return; if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); q.value = ''; sel = 0; renderHits(); q.focus(); };
   qsa('[data-open-search]').forEach((b) => b.addEventListener('click', openSearch));
@@ -60,6 +61,12 @@
     const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
     if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) { e.preventDefault(); openSearch(); }
   });
+
+  // 없는 주소로 들어오면 가장 비슷한 계산기를 추천 (/salry/ → 연봉 실수령액)
+  if (page === '404' && window.CalcSearch) {
+    const near = CalcSearch.nearSlug(INDEX, location.pathname), box = $('near');
+    if (near && box) { box.hidden = false; box.innerHTML = `혹시 <a href="/${near.s}/"><b>${near.n}</b></a>를 찾으셨나요?`; }
+  }
 
   // ── 3. 즐겨찾기·최근 사용 ──
   const favs = () => store.get('favs', []);
@@ -315,6 +322,15 @@
       $('out').innerHTML = kpi([['청약 가점', x.total + '점 / 84점', 'main'], ['무주택 기간', x.home + ' / 32점'], ['부양가족', x.dep + ' / 35점'], ['통장 기간', x.account + ' / 17점' + (x.spouse ? ` (배우자 +${x.spouse})` : '')]]);
       Charts.bars($('chart'), { title: '항목별 점수', horizontal: true, cats: ['무주택', '부양가족', '통장'], series: [{ label: '내 점수', color: S.p, values: [x.home, x.dep, x.account] }, { label: '남은 점수', color: S.i, values: [32 - x.home, 35 - x.dep, 17 - x.account] }] });
       $('tables').innerHTML = '';
+    },
+    winrate() {
+      const w = num('w'), l = num('l'), d = num('d'), T = num('target') / 100, x = Calc.winRate(w, l, d, $('draw').value, T);
+      const pct = (v) => (v * 100).toFixed(1) + '%', tg = num('target').toFixed(1).replace(/\.0$/, '') + '%';
+      const goal = !x.G ? ['목표까지', '경기를 입력하세요'] : x.rate >= T ? [`${tg} 지키며 질 수 있는 판`, x.canLose + '연패까지'] : [`${tg}까지 필요한 연승`, isFinite(x.needWins) ? x.needWins + '연승' : '도달 불가'];
+      $('out').innerHTML = kpi([['승률', pct(x.rate), 'main'], ['전적', `${w}승 ${l}패${d ? ' ' + d + '무' : ''} (${x.games}경기)`], goal, ['야구식 표기', x.rate.toFixed(3).replace(/^0/, '')]]) +
+        (x.G && x.rate < T && !isFinite(x.needWins) ? '<p class="note over">이미 진 경기가 있어 승률 100%는 만들 수 없습니다.</p>' : '');
+      if (x.games) Charts.bars($('chart'), { title: '전적 구성', horizontal: true, cats: ['전적'], series: [{ label: '승', color: S.p, values: [w] }, ...(d ? [{ label: '무', color: S.g, values: [d] }] : []), { label: '패', color: S.i, values: [l] }] }); else $('chart').innerHTML = '';
+      $('tables').innerHTML = x.G && T > 0 && T < 1 ? table('연승하면 승률이 이렇게 바뀝니다', ['연승', '전적', '승률'], [0, 1, 3, 5, 10, 20].map((k) => { const y = Calc.winRate(w + k, l, d, $('draw').value, T); return [k ? k + '연승' : '지금', `${w + k}승 ${l}패${d ? ' ' + d + '무' : ''}`, pct(y.rate)]; })) : '';
     },
     bmi() {
       const x = Calc.bmi(num('height'), num('weight')); if (!isFinite(x.bmi)) return;

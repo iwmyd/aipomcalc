@@ -334,7 +334,18 @@
     return { bmi: v, level, normalMin: 18.5 * m * m, normalMax: 22.9 * m * m };
   }
 
-  const api = { loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
+  /** 승률. draw: 'exclude'(무승부 빼고 승÷(승+패), KBO 방식) | 'half'(무승부 0.5승) | 'loss'(무승부도 경기 수에 포함, 승÷전체)
+   *  target(0~1) 까지 필요한 연승 수 / 목표 이상을 지키며 버틸 수 있는 연패 수 */
+  function winRate(w, l, d, draw, target) {
+    const W = w + (draw === 'half' ? d / 2 : 0), G = w + l + (draw === 'exclude' ? 0 : d);
+    const rate = G > 0 ? W / G : 0, T = target;
+    let needWins = 0, canLose = 0;
+    if (T > 0 && rate < T) needWins = T >= 1 ? (W === G ? 0 : Infinity) : Math.max(0, Math.ceil((T * G - W) / (1 - T) - 1e-9));
+    if (T > 0 && G > 0 && rate >= T) canLose = Math.max(0, Math.floor(W / T - G + 1e-9));
+    return { rate, games: w + l + d, W, G, needWins, canLose };
+  }
+
+  const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
     Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;

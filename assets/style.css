@@ -83,6 +83,8 @@ kbd { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--line)
 #qr li a small { color: var(--muted); }
 #qr li[aria-selected="true"] a, #qr li a:hover { background: var(--soft); }
 #qr .empty { padding: 16px; color: var(--muted); }
+#qr .sug { padding: 10px 12px 4px; font-size: .88rem; color: var(--muted); }
+.near { font-size: 1.05rem; }
 .search-hint { margin: 0; padding: 8px 16px 12px; color: var(--muted); font-size: .8rem; }
 
 /* 홈 */
