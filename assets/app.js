@@ -68,6 +68,27 @@
     if (near && box) { box.hidden = false; box.innerHTML = `혹시 <a href="/${near.s}/"><b>${near.n}</b></a>를 찾으셨나요?`; }
   }
 
+  // 홈 카드 hover (PC·마우스, 움직임 줄이기 설정이 아닐 때): 올린 카드 열을 1.08fr 로 → 같은 줄 카드는 부드럽게 밀려남
+  if (page === 'home' && matchMedia('(hover: hover) and (pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const setup = (g) => { // auto-fill 로 정해진 열 수를 읽어 같은 수의 1fr 로 고정해야 열 너비 전환이 부드럽다
+      g.style.gridTemplateColumns = '';
+      const n = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length;
+      g.dataset.n = n; g.style.gridTemplateColumns = Array(n).fill('1fr').join(' ');
+    };
+    const cols = (g, hot) => Array(+g.dataset.n).fill('1fr').map((c, i) => (i === hot ? '1.08fr' : c)).join(' ');
+    qsa('.tiles').forEach((g) => {
+      g.addEventListener('mouseover', (e) => {
+        const t = e.target.closest('.tile'); if (!t || !g.contains(t) || t.classList.contains('grow')) return;
+        if (!g.dataset.n) setup(g);
+        qsa('.tile.grow', g).forEach((x) => x.classList.remove('grow'));
+        const n = +g.dataset.n; if (n < 2) return;
+        requestAnimationFrame(() => { t.classList.add('grow'); g.style.gridTemplateColumns = cols(g, [...g.children].indexOf(t) % n); });
+      });
+      g.addEventListener('mouseleave', () => { qsa('.tile.grow', g).forEach((x) => x.classList.remove('grow')); if (g.dataset.n) g.style.gridTemplateColumns = cols(g, -1); });
+    });
+    let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => qsa('.tiles').forEach((g) => { if (g.dataset.n) setup(g); }), 150); });
+  }
+
   // ── 3. 즐겨찾기·최근 사용 ──
   const favs = () => store.get('favs', []);
   const favBtn = qs('[data-fav]');

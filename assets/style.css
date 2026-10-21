@@ -102,6 +102,12 @@ kbd { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--line)
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
 .tile { display: flex; align-items: center; gap: 12px; padding: 14px; min-height: 72px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); text-decoration: none; color: var(--ink); transition: border-color .2s, box-shadow .2s; }
 .tile:hover { border-color: var(--tone); box-shadow: var(--shadow); }
+/* 홈(PC·마우스): 마우스를 올린 카드의 열이 살짝 넓어지고(같은 줄 카드는 밀려남) 높이도 살짝 커진다 — 열 계산은 app.js */
+@media (hover: hover) and (pointer: fine) {
+  [data-page="home"] .tiles { transition: grid-template-columns .32s cubic-bezier(.22, .8, .32, 1); }
+  [data-page="home"] .tile { transition: border-color .2s, box-shadow .2s, padding .32s cubic-bezier(.22, .8, .32, 1); }
+  [data-page="home"] .tile.grow { padding-block: 18px; }
+}
 .cat .tile, .related .tile, .mine .tile { border-left: 4px solid var(--tone); }
 .cat h2 { padding-bottom: 8px; border-bottom: 2px solid var(--tone-soft); }
 .tic { display: grid; place-items: center; width: 42px; height: 42px; flex: none; border-radius: 12px; background: var(--tone-soft); color: var(--tone); }
