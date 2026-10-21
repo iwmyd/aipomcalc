@@ -15,8 +15,10 @@
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     const s = Math.min((W - 2 * PADX) / Math.max(x1 - x0, 1e-9), (H - 2 * PAD) / Math.max(y1 - y0, 1e-9));
-    const ox = (W - (x1 - x0) * s) / 2, oy = (H - (y1 - y0) * s) / 2;
-    const T = ([x, y]) => [ox + (x - x0) * s, H - oy - (y - y0) * s];
+    // 납작한 그림(얇은 슬래브 등)은 위아래 빈 공간이 생기지 않게 그림 높이를 내용에 맞춘다
+    const HH = opt.h || Math.max(180, Math.min(H, (y1 - y0) * s + 2 * PAD));
+    const ox = (W - (x1 - x0) * s) / 2, oy = (HH - (y1 - y0) * s) / 2;
+    const T = ([x, y]) => [ox + (x - x0) * s, HH - oy - (y - y0) * s];
     const P = (arr) => arr.map((p) => T(p).map((v) => v.toFixed(1)).join(',')).join(' ');
     let out = '';
     for (const it of items) {
@@ -30,7 +32,7 @@
       } else if (it.text) { const [x, y] = T(it.at); out += `<text class="${it.cls || 'dg-t'}" x="${(x + (it.dx || 0)).toFixed(1)}" y="${(y + (it.dy || 0)).toFixed(1)}" text-anchor="${it.anchor || 'middle'}">${esc(it.text)}</text>`; }
     }
     const defs = '<defs><marker id="dga" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 5L10 0v10z" class="dg-arrow"/></marker></defs>';
-    return `<figure class="diagram"><svg viewBox="0 0 ${W} ${opt.h || H}" role="img" aria-label="${esc(label)}">${defs}${out}</svg><figcaption>${esc(label)}</figcaption></figure>`;
+    return `<figure class="diagram"><svg viewBox="0 0 ${W} ${HH}" role="img" aria-label="${esc(label)}">${defs}${out}</svg><figcaption>${esc(label)}</figcaption></figure>`;
   }
 
   // ── 평면 도형 ──

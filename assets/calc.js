@@ -528,10 +528,55 @@
   };
   function convert(kind, value, from) { const U = UNITS[kind]; if (!U || !(from in U)) return []; const base = value * U[from]; return Object.keys(U).map((u) => [u, base / U[u]]); }
 
+  /** FC 온라인 이적시장 수수료 — 넥슨 공식 수수료 계산기(fconline.nexon.com/common/calculator, 2026-10-22 확인)와 같은 식.
+   * 기본 수수료 = ⌊판매가 × 40/100⌋, 기본 할인 N = PC방 30 + TOP CLASS 20 → ⌊기본 수수료 × N/100⌋,
+   * 쿠폰 I% 는 N + I ≤ 100 으로 자르고 ⌊기본 수수료 × I/100⌋, 최대 할인 BP 가 있으면 그 이하. 나눗셈은 모두 버림.
+   * BP 는 조 단위를 넘어 Number 정밀도(2^53)를 벗어날 수 있어 BigInt 로 계산한다. */
+  const FC_COUPONS = [20, 30, 40, 50]; // 넥슨 공지로 확인된 전체 수수료 할인 쿠폰 (그 밖의 값은 직접 입력)
+  const big = (v) => { try { return BigInt(v || 0); } catch (e) { return 0n; } };
+  function fcFee(rows, pc, top) {
+    const N = BigInt(pc && top ? 50 : pc ? 30 : top ? 20 : 0);
+    let gross = 0n, base = 0n, disc = 0n, coupon = 0n; const each = [];
+    for (const r of rows) {
+      const q = big(r.qty || 1), amt = big(r.price) * q, T = amt * 40n / 100n;
+      const c = BigInt(Math.max(0, Math.floor(Number(r.coupon) || 0)));
+      const I = c < 1n ? 0n : c + N > 100n ? 100n - N : c;
+      const F = big(r.cap) * q, U = T * I / 100n, cp = F && U > F ? F : U, d = T * N / 100n;
+      gross += amt; base += T; disc += d; coupon += cp;
+      each.push({ amt, base: T, disc: d, coupon: cp, couponRaw: U, capped: !!(F && U > F), I: Number(I), final: T - d - cp, receive: amt - (T - d - cp) });
+    }
+    const final = base - disc - coupon;
+    return { N: Number(N), gross, base, disc, coupon, final, receive: gross - final, each };
+  }
+  /** 받는 BP 가 target 이상이 되는 가장 낮은 판매가. 받는 BP 는 판매가가 1 오를 때 0 또는 1 이상 늘기만 하므로 이분 탐색 */
+  function fcPriceFor(target, pc, top, coupon, cap) {
+    target = big(target); if (target <= 0n) return 0n;
+    let lo = target, hi = target * 2n + 10n; // 수수료는 많아야 40% → 받는 BP ≥ 판매가의 60%
+    while (lo < hi) { const m = (lo + hi) / 2n; if (fcFee([{ price: m, coupon, cap }], pc, top).receive >= target) hi = m; else lo = m + 1n; }
+    return lo;
+  }
+  /** '1억 2,000만', '12.5억', '3,500,000', '3억 2.000만'(천 단위 점) → BigInt BP */
+  function parseBP(s) {
+    s = String(s == null ? '' : s).replace(/(\d)[.,](?=\d{3}(?!\d))/g, '$1').replace(/[,\s]|BP|bp/g, '');
+    if (!s) return 0n;
+    if (/^\d+$/.test(s)) return BigInt(s);
+    const U = { 조: 1e12, 억: 1e8, 만: 1e4, 천: 1e3 }; let total = 0, ok = false, m; const re = /(\d+(?:\.\d+)?)(조|억|만|천)?/g;
+    while ((m = re.exec(s))) { if (!m[0]) break; ok = true; total += parseFloat(m[1]) * (m[2] ? U[m[2]] : 1); }
+    return ok ? BigInt(Math.round(total)) : 0n;
+  }
+  /** 1234567890n → '12억 3,456만 7,890' (공식 계산기와 같은 표기) */
+  function korBP(v) {
+    v = big(v); if (v === 0n) return '0'; const neg = v < 0n; if (neg) v = -v;
+    const units = [['경', 10n ** 16n], ['조', 10n ** 12n], ['억', 10n ** 8n], ['만', 10n ** 4n], ['', 1n]]; const out = [];
+    for (const [u, k] of units) if (v >= k) { const n = v / k; v %= k; out.push(n.toLocaleString('ko-KR') + u); }
+    return (neg ? '−' : '') + out.join(' ');
+  }
+
   const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
     Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
     annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
-    PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert };
+    PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert,
+    FC_COUPONS, fcFee, fcPriceFor, parseBP, korBP };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);
