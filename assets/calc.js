@@ -448,9 +448,90 @@
     return { step: step + 1, parts, basic, energy, clim, fuelFee, sum, vat, fund, total: Math.floor((sum + vat + fund) / 10) * 10, t1, t2 };
   }
 
+  // ───────────── 건축·토목 6종 (2026-10-22) — 길이는 m(계단만 mm), 결과는 SI ─────────────
+  const PY = 400 / 121; // 1평 = 400/121 ㎡
+  /** 평면 도형 면적·둘레(m). 세 변 삼각형은 헤론 공식, 다각형은 좌표 신발끈 공식(꼭짓점을 둘레 순서대로) */
+  function shapeArea(shape, v) {
+    const P = Math.PI; let area = NaN, perim = NaN, err = '';
+    switch (shape) {
+      case 'rect': area = v.w * v.h; perim = 2 * (v.w + v.h); break;
+      case 'tri': area = v.base * v.height / 2; break;
+      case 'tri3': { const { a, b, c } = v; if (!(a > 0 && b > 0 && c > 0) || a + b <= c || a + c <= b || b + c <= a) { err = '세 변으로 삼각형을 만들 수 없습니다. 두 변의 합이 나머지 한 변보다 커야 합니다.'; break; }
+        const p = (a + b + c) / 2; area = Math.sqrt(p * (p - a) * (p - b) * (p - c)); perim = a + b + c; break; }
+      case 'circle': area = P * (v.d / 2) ** 2; perim = P * v.d; break;
+      case 'trap': area = (v.top + v.bottom) / 2 * v.th; break;
+      case 'sector': area = P * v.r * v.r * v.angle / 360; perim = 2 * v.r + 2 * P * v.r * v.angle / 360; break;
+      case 'ellipse': { const a = v.ea, b = v.eb; area = P * a * b; const h = a + b > 0 ? ((a - b) / (a + b)) ** 2 : 0; perim = P * (a + b) * (1 + 3 * h / (10 + Math.sqrt(4 - 3 * h))); break; } // 둘레: 라마누잔 근사
+      case 'poly': { const pts = v.pts || []; if (pts.length < 3) { err = '꼭짓점 좌표를 3개 이상 넣어 주세요.'; break; }
+        let s2 = 0, per = 0; for (let i = 0; i < pts.length; i++) { const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; s2 += x1 * y2 - x2 * y1; per += Math.hypot(x2 - x1, y2 - y1); }
+        area = Math.abs(s2) / 2; perim = per; break; }
+    }
+    return { area, perim, pyeong: area / PY, err };
+  }
+  /** "x,y" 한 줄에 하나 → 좌표 배열 */
+  const parsePts = (t) => String(t || '').split(/\n|;/).map((l) => l.trim()).filter(Boolean).map((l) => l.split(/[,\s]+/).map(Number)).filter((p) => p.length >= 2 && p.every(Number.isFinite));
+  /** 입체 부피(㎥). 원뿔대 V = πh/3·(R² + Rr + r²), 각뿔대 V = h/3·(A1 + A2 + √(A1·A2)) */
+  function solidVolume(shape, v) {
+    const P = Math.PI;
+    const f = { box: () => v.w * v.l * v.h, cyl: () => P * (v.d / 2) ** 2 * v.h, cone: () => P * (v.d / 2) ** 2 * v.h / 3,
+      frustum: () => { const R = v.d1 / 2, r = v.d2 / 2; return P * v.h / 3 * (R * R + R * r + r * r); },
+      pfrustum: () => v.h / 3 * (v.a1 + v.a2 + Math.sqrt(v.a1 * v.a2)), sphere: () => 4 / 3 * P * (v.d / 2) ** 3 }[shape];
+    const vol = f ? f() : NaN;
+    return { vol, liter: vol * 1000 };
+  }
+  /** 레미콘·콘크리트 타설 할증 — 건설공사 표준품셈 재료의 할증 */
+  const CONC_LOSS = { rebar: 0.01, plain: 0.02, mixRebar: 0.02, mixPlain: 0.03, none: 0 };
+  /** 콘크리트 물량: 1개 정미 ㎥ × 개수 → 할증 포함 주문량 → 레미콘 차 대수(올림) */
+  function concrete(kind, v, count, loss, truck) {
+    const one = { slab: v.w * v.l * v.t, colRect: v.w * v.l * v.h, colRound: Math.PI * (v.d / 2) ** 2 * v.h, wall: v.l * v.h * v.t }[kind] || 0;
+    const rate = CONC_LOSS[loss] ?? 0, net = one * Math.max(0, count || 0), order = net * (1 + rate);
+    return { one, net, order, rate, trucks: truck > 0 ? Math.ceil(order / truck - 1e-9) : 0 };
+  }
+  /** 이형철근 KS D 3504: [호칭, 공칭지름 mm, 공칭단면적 mm², 단위무게 kg/m] */
+  const REBAR = [['D10', 9.53, 71.33, 0.560], ['D13', 12.7, 126.7, 0.995], ['D16', 15.9, 198.6, 1.56], ['D19', 19.1, 286.5, 2.25], ['D22', 22.2, 387.1, 3.04], ['D25', 25.4, 506.7, 3.98],
+    ['D29', 28.6, 642.4, 5.04], ['D32', 31.8, 794.2, 6.23], ['D35', 34.9, 956.6, 7.51], ['D38', 38.1, 1140, 8.95], ['D41', 41.3, 1340, 10.5], ['D51', 50.8, 2027, 15.9]];
+  function rebar(name, lengthM, count, lossRate) {
+    const r = REBAR.find((x) => x[0] === name) || REBAR[0], net = r[3] * lengthM * count;
+    return { unit: r[3], dia: r[1], areaMm2: r[2], totalLen: lengthM * count, net, order: net * (1 + (lossRate || 0)) };
+  }
+  /** 벽돌(표준형 190×90×57, 줄눈 10mm) ㎡당 정미 매수 — 건설공사 표준품셈 */
+  const BRICK = { '0.5B': 75, '1.0B': 149, '1.5B': 224 };
+  function brick(wallArea, openArea, thick, lossRate) {
+    const area = Math.max(0, wallArea - openArea), raw = area * BRICK[thick];
+    return { area, perM2: BRICK[thick], net: Math.ceil(raw - 1e-9), order: Math.ceil(raw * (1 + lossRate) - 1e-9) };
+  }
+  /** 경사도: 기울기 g = 높이 ÷ 수평거리 → %, 각도, 1:n, 물매(수평 10에 대한 높이 = 몇 치), 경사 길이 */
+  function slope(g, run) {
+    return { g, pct: g * 100, deg: Math.atan(g) * 180 / Math.PI, n: g > 0 ? 1 / g : Infinity, chi: g * 10,
+      len: run > 0 ? run * Math.sqrt(1 + g * g) : NaN, rise: run > 0 ? run * g : NaN, ramp12: g <= 1 / 12 + 1e-12, ramp8: g <= 1 / 8 + 1e-12 };
+  }
+  /** 계단: 층고 H(mm) ÷ 목표 단높이 → 단 수(올림), 실제 단높이 = H ÷ 단 수. 디딤판 = 단 수 − 1(마지막 단은 위층 바닥) */
+  function stairs(H, target, tread) {
+    const n = Math.max(1, Math.ceil(H / target - 1e-9)), R = H / n, treads = n - 1;
+    return { n, R, treads, run: treads * tread, blondel: 2 * R + tread, deg: Math.atan(R / tread) * 180 / Math.PI, landing: H > 3000 };
+  }
+  /** 계단 법정 기준 [단높이 이하, 단너비 이상] mm — 건축물방화구조규칙 제15조②(2026.10.6 시행), 주택건설기준 등에 관한 규정 제16조 */
+  const STAIR_RULE = { elem: [160, 260], mid: [180, 260], apt: [180, 260], aptOut: [200, 240], other: null };
+  /** 토공량: 양단면 평균법 V = Σ (Aᵢ + Aᵢ₊₁) ÷ 2 × Lᵢ (자연 상태). 흐트러진 상태 = V × L, 다져진 상태 = V × C */
+  function earthwork(areas, dists, L, C) {
+    let vol = 0; const segs = [];
+    for (let i = 0; i + 1 < areas.length; i++) { const v = (areas[i] + areas[i + 1]) / 2 * (dists[i] || 0); segs.push(v); vol += v; }
+    return { vol, segs, loose: vol * L, compact: vol * C };
+  }
+  /** 단위 환산 — 기준 단위(m, ㎡, ㎥, N, Pa)에 대한 배수. ft·in·lbf·psi 는 국제 정의값, 자·간·평은 계량법 환산 */
+  const UNITS = {
+    len: { mm: 0.001, cm: 0.01, m: 1, km: 1000, 'in': 0.0254, ft: 0.3048, yd: 0.9144, '자(尺)': 10 / 33, '간(間)': 60 / 33 },
+    area: { 'cm²': 1e-4, '㎡': 1, '평': 400 / 121, 'a(아르)': 100, ha: 1e4, '㎢': 1e6, 'ft²': 0.09290304, 'ac(에이커)': 4046.8564224 },
+    vol: { L: 0.001, '㎥(루베)': 1, 'ft³': 0.028316846592, 'yd³': 0.764554857984, 'gal(US)': 0.003785411784 },
+    force: { N: 1, kN: 1000, kgf: 9.80665, tf: 9806.65, lbf: 4.4482216152605 },
+    press: { Pa: 1, kPa: 1e3, MPa: 1e6, 'N/mm²': 1e6, 'kgf/cm²': 98066.5, 'tf/m²': 9806.65, bar: 1e5, psi: 6894.757293168 },
+  };
+  function convert(kind, value, from) { const U = UNITS[kind]; if (!U || !(from in U)) return []; const base = value * U[from]; return Object.keys(U).map((u) => [u, base / U[u]]); }
+
   const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
     Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
-    annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC };
+    annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
+    PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);

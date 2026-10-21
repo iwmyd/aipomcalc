@@ -168,6 +168,7 @@
   });
   const kpi = (items) => `<div class="kpis">${items.map(([k, v, c]) => `<div class="kpi ${c || ''}"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
   const S = { p: '--s-principal', i: '--s-interest', g: '--s-support' };
+  const showFor = (state) => qsa('.calc [data-show]').forEach((d) => { d.style.display = d.dataset.show.split(' ').some((t) => state.includes(t)) ? '' : 'none'; });
 
   // ── 8. 계산기별 화면 ──
   const METHODS = [['equal-payment', '원리금균등'], ['equal-principal', '원금균등'], ['bullet', '만기일시']];
@@ -419,6 +420,94 @@
       Charts.bars($('chart'), { title: '구간별 전력량요금', horizontal: true, cats: ['1단계 ' + x.parts[0] + 'kWh', '2단계 ' + x.parts[1] + 'kWh', '3단계 ' + x.parts[2] + 'kWh'], series: [{ label: '금액', color: S.i, values: x.parts.map((q, i) => Math.floor(q * Calc.ELEC.rate[i])) }] });
       const uses = [100, 200, 300, 350, 400, 450, 500, 600];
       $('tables').innerHTML = table('사용량별 요금 (' + (summer ? '여름' : '기타 계절') + ')', ['사용량', '단계', '청구 요금'], uses.map((u) => { const y = Calc.electricity(u, summer, num('climate'), num('fuel')); return { cls: u === kwh ? 'now' : '', cells: [u + 'kWh', y.step + '단계', won(y.total)] }; }));
+    },
+
+    // ── 건축·토목 ──
+    areavol() {
+      const sh = $('shape').value; showFor([sh]);
+      const solid = ['box', 'cyl', 'cone', 'frustum', 'pfrustum', 'sphere'].includes(sh);
+      const n = (id) => Math.max(0, num(id));
+      const nf = (v, d = 3) => (Number.isFinite(v) ? (+v.toFixed(d)).toLocaleString('ko-KR', { maximumFractionDigits: d }) : '—');
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+      if (solid) {
+        const x = Calc.solidVolume(sh, { w: n('w'), l: n('l'), h: sh === 'box' ? n('bh') : sh === 'frustum' ? n('fh') : sh === 'pfrustum' ? n('ph') : n('ch'), d: n('d'), d1: n('d1'), d2: n('d2'), a1: n('a1'), a2: n('a2') });
+        $('out').innerHTML = kpi([['부피', nf(x.vol) + '㎥', 'main'], ['리터', nf(x.liter, 1) + 'L'], ['콘크리트로 채우면', '<a href="/materials/">자재 물량 계산기 →</a>']]);
+        return;
+      }
+      const v = { w: n('w'), h: n('h'), base: n('base'), height: n('height'), a: n('sa'), b: n('sb'), c: n('sc'), top: n('top'), bottom: n('bottom'), th: n('th'), d: n('d'), r: n('r'), angle: Math.min(360, n('angle')), ea: n('ea'), eb: n('eb'), pts: Calc.parsePts($('pts').value) };
+      const x = Calc.shapeArea(sh, v);
+      if (x.err) { $('out').innerHTML = `<p class="note over">${x.err}</p>`; return; }
+      $('out').innerHTML = kpi([['면적', nf(x.area) + '㎡', 'main'], ['평', nf(x.pyeong, 2) + '평'], ['둘레', Number.isFinite(x.perim) ? nf(x.perim) + 'm' + (sh === 'ellipse' ? ' (근사)' : '') : '—'], ['cm²', nf(x.area * 1e4, 0) + 'cm²']]) +
+        (sh === 'poly' ? `<p class="note">꼭짓점 ${v.pts.length}개로 계산했습니다. 변이 서로 교차하지 않게 둘레 순서대로 넣어야 정확합니다.</p>` : '');
+    },
+    materials() {
+      const mat = $('mat').value, ck = $('ckind').value; showFor([mat, mat + ':' + ck]);
+      const n = (id) => Math.max(0, num(id)), nf = (v, d = 3) => (+v.toFixed(d)).toLocaleString('ko-KR', { maximumFractionDigits: d });
+      $('chart').innerHTML = '';
+      if (mat === 'concrete') {
+        const x = Calc.concrete(ck, { w: n('cw'), l: ck === 'wall' ? n('wl') : n('cl'), t: n('ct'), h: ck === 'colRound' ? n('rh') : ck === 'wall' ? n('wh') : n('ch'), d: n('cd') }, Math.round(n('cn')), $('closs').value, n('truck'));
+        $('out').innerHTML = kpi([['주문량 (할증 포함)', nf(x.order, 2) + '㎥', 'main'], ['정미 물량', nf(x.net, 3) + '㎥'], ['할증', (x.rate * 100) + '%'], ['1개 체적', nf(x.one, 3) + '㎥'], ...(n('truck') ? [['레미콘 차', x.trucks + '대 (' + n('truck') + '㎥ 기준)']] : [])]);
+        $('tables').innerHTML = table('같은 물량의 할증별 주문량 (표준품셈)', ['구분', '할증', '주문량'], [['rebar', '레미콘 · 철근·철골 구조물'], ['plain', '레미콘 · 무근 구조물'], ['mixRebar', '현장 혼합 · 철근 구조물'], ['mixPlain', '현장 혼합 · 무근 구조물']].map(([k, l]) => ({ cls: k === $('closs').value ? 'now' : '', cells: [l, Calc.CONC_LOSS[k] * 100 + '%', nf(x.net * (1 + Calc.CONC_LOSS[k]), 2) + '㎥'] })));
+      } else if (mat === 'rebar') {
+        const x = Calc.rebar($('rb').value, n('rlen'), Math.round(n('rcnt')), +$('rloss').value);
+        $('out').innerHTML = kpi([['주문 중량 (할증 포함)', nf(x.order / 1000, 3) + '톤', 'main'], ['정미 중량', nf(x.net, 1) + 'kg'], ['총 길이', nf(x.totalLen, 1) + 'm'], ['단위무게', x.unit + 'kg/m'], ['공칭지름', x.dia + 'mm']]);
+        $('tables').innerHTML = table('이형철근 단위무게 (KS D 3504)', ['호칭', '공칭지름', '공칭단면적', '단위무게', '1톤당 길이'], Calc.REBAR.map(([nm, d, a, w]) => ({ cls: nm === $('rb').value ? 'now' : '', cells: [nm, d + 'mm', a + 'mm²', w + 'kg/m', nf(1000 / w, 0) + 'm'] })));
+      } else {
+        const x = Calc.brick(n('bw') * n('bh'), n('bopen'), $('bt').value, +$('bloss').value);
+        $('out').innerHTML = kpi([['주문 매수 (할증 포함)', x.order.toLocaleString('ko-KR') + '매', 'main'], ['정미 매수', x.net.toLocaleString('ko-KR') + '매'], ['쌓을 면적', nf(x.area, 2) + '㎡'], ['㎡당', x.perM2 + '매']]) +
+          (n('bopen') > n('bw') * n('bh') ? '<p class="note over">문·창 면적이 벽 면적보다 큽니다.</p>' : '');
+        $('tables').innerHTML = table('쌓기 두께별 매수 (표준형 190×90×57, 줄눈 10mm)', ['두께', '㎡당', '이 벽 정미', '주문 (할증)'], Object.keys(Calc.BRICK).map((t) => { const y = Calc.brick(n('bw') * n('bh'), n('bopen'), t, +$('bloss').value); return { cls: t === $('bt').value ? 'now' : '', cells: [t, y.perM2 + '매', y.net.toLocaleString('ko-KR') + '매', y.order.toLocaleString('ko-KR') + '매'] }; }));
+      }
+    },
+    slope() {
+      const mode = $('smode').value; showFor([mode]);
+      const n = (id) => Math.max(0, num(id)), nf = (v, d = 2) => (Number.isFinite(v) ? (+v.toFixed(d)).toLocaleString('ko-KR', { maximumFractionDigits: d }) : '—');
+      let g = NaN, run = n('run2');
+      if (mode === 'rr') { run = n('run'); g = run > 0 ? n('rise') / run : NaN; }
+      else if (mode === 'pct') g = n('pct') / 100;
+      else if (mode === 'deg') g = n('deg') < 90 ? Math.tan(n('deg') * Math.PI / 180) : NaN;
+      else if (mode === 'ratio') g = n('ratio') > 0 ? 1 / n('ratio') : NaN;
+      else g = n('chi') / 10;
+      $('chart').innerHTML = '';
+      if (!Number.isFinite(g)) { $('out').innerHTML = '<p class="note over">값을 확인해 주세요. 수평거리·n은 0보다 커야 하고, 각도는 90° 미만이어야 합니다.</p>'; $('tables').innerHTML = ''; return; }
+      const x = Calc.slope(g, run), ok = (b) => (b ? '✔ 충족' : '✕ 초과');
+      $('out').innerHTML = kpi([['경사 퍼센트', nf(x.pct, 2) + '%', 'main'], ['각도', nf(x.deg, 2) + '°'], ['비율', g > 0 ? '1 : ' + nf(x.n, 2) : '수평'], ['지붕 물매', nf(x.chi, 2) + '치'], ...(run > 0 ? [['높이', nf(x.rise, 3) + 'm'], ['경사 길이', nf(x.len, 3) + 'm']] : [])]);
+      $('tables').innerHTML = table('경사로 기준 확인', ['기준', '허용 기울기', '이 경사'], [['장애인 경사로 (편의시설 세부기준)', '1/12 (8.33%) 이하', ok(x.ramp12)], ['장애인 경사로 · 요건 충족 시 완화', '1/8 (12.5%) 이하', ok(x.ramp8)], ['계단 대체 경사로 (건축물방화구조규칙 제15조)', '1 : 8 (12.5%) 이하', ok(x.ramp8)]]) +
+        table('자주 쓰는 구배 환산표', ['퍼센트', '각도', '1 : n', '물매'], [0.01, 0.02, 0.05, 1 / 12, 0.1, 0.125, 0.2, 0.3, 0.4, 0.5, 1].map((v) => { const y = Calc.slope(v, 0); return { cls: Math.abs(v - g) < 1e-9 ? 'now' : '', cells: [nf(y.pct, 2) + '%', nf(y.deg, 2) + '°', '1 : ' + nf(y.n, 2), nf(y.chi, 2) + '치'] }; }));
+    },
+    stairs() {
+      const H = Math.max(0, num('H')), tg = Math.max(1, num('target')), T = Math.max(1, num('tread')), use = $('use').value;
+      $('chart').innerHTML = '';
+      if (!H) { $('out').innerHTML = '<p class="note over">층고를 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
+      const x = Calc.stairs(H, tg, T), rule = Calc.STAIR_RULE[use], mm = (v) => (+v.toFixed(1)).toLocaleString('ko-KR') + 'mm';
+      $('out').innerHTML = kpi([['단 수', x.n + '단', 'main'], ['실제 단높이', mm(x.R)], ['디딤판 수', x.treads + '개'], ['계단 수평 길이', mm(x.run)], ['경사각', (+x.deg.toFixed(1)) + '°'], ['2R + T', mm(x.blondel)]]) +
+        (rule ? `<p class="note ${x.R <= rule[0] + 1e-9 && T >= rule[1] ? '' : 'over'}">법정 기준(단높이 ${rule[0] / 10}cm 이하·단너비 ${rule[1] / 10}cm 이상): 단높이 ${x.R <= rule[0] + 1e-9 ? '충족' : '초과'}, 단너비 ${T >= rule[1] ? '충족' : '부족'}.</p>` : '<p class="note">이 용도는 단높이·단너비 수치 기준이 없습니다. 계단참·난간·유효너비 기준은 지켜야 합니다.</p>') +
+        (x.blondel < 600 || x.blondel > 650 ? `<p class="note">2R + T가 ${mm(x.blondel)}로 걷기 편한 범위(600~650mm, 설계 관례)를 벗어납니다.</p>` : '') +
+        (x.landing ? '<p class="note">높이 3m를 넘으므로 3m 이내마다 유효너비 120cm 이상의 계단참이 필요합니다(건축물방화구조규칙 제15조 제1항).</p>' : '');
+      $('tables').innerHTML = table('단 수별 단높이 (같은 층고)', ['단 수', '단높이', '계단 길이 (단너비 ' + T + 'mm)', '2R + T'], [-2, -1, 0, 1, 2].map((k) => x.n + k).filter((k) => k >= 1).map((k) => ({ cls: k === x.n ? 'now' : '', cells: [k + '단', mm(H / k), mm((k - 1) * T), mm(2 * H / k + T)] })));
+    },
+    earthwork() {
+      const A = [], D = [];
+      for (let i = 1; i <= 5; i++) { const raw = $('A' + i).value; if (raw === '') break; A.push(Math.max(0, num('A' + i))); if (i > 1) D.push(Math.max(0, num('L' + (i - 1)))); }
+      const nf = (v, d = 2) => (+v.toFixed(d)).toLocaleString('ko-KR', { maximumFractionDigits: d });
+      if (A.length < 2) { $('out').innerHTML = '<p class="note over">측점을 2개 이상 넣어 주세요(위에서부터 차례대로).</p>'; $('chart').innerHTML = ''; $('tables').innerHTML = ''; return; }
+      const x = Calc.earthwork(A, D, Math.max(0, num('kL')), Math.max(0, num('kC'))), dump = Math.max(0, num('dump'));
+      $('out').innerHTML = kpi([['토공량 (자연 상태)', nf(x.vol) + '㎥', 'main'], ['흐트러진 상태 (운반량)', nf(x.loose) + '㎥'], ['다져진 상태', nf(x.compact) + '㎥'], ...(dump ? [['덤프트럭', Math.ceil(x.loose / dump - 1e-9) + '대']] : [])]) +
+        (D.some((d) => d === 0) ? '<p class="note over">거리가 0인 구간이 있습니다.</p>' : '');
+      Charts.bars($('chart'), { title: '구간별 토량 (자연 상태)', cats: x.segs.map((_, i) => `${i + 1}~${i + 2}`), series: [{ label: '토량', color: S.p, values: x.segs }] });
+      $('tables').innerHTML = table('구간별 계산 (양단면 평균법)', ['구간', '평균 단면적', '거리', '토량'], x.segs.map((v, i) => [`측점 ${i + 1}~${i + 2}`, nf((A[i] + A[i + 1]) / 2) + '㎡', nf(D[i]) + 'm', nf(v) + '㎥']));
+    },
+    unitconv() {
+      const k = $('ukind').value; showFor([k]);
+      const from = $('ufrom-' + k).value, val = num('uval');
+      const fmt = (v) => { if (v === 0) return '0'; const a = Math.abs(v); return a >= 1e-4 && a < 1e12 ? (+v.toPrecision(8)).toLocaleString('ko-KR', { maximumFractionDigits: 8 }) : v.toExponential(6); };
+      const rows = Calc.convert(k, val, from);
+      // 위쪽 카드: 현장에서 흔히 찾는 단위부터 (MPa → kgf/cm², 평 ↔ ㎡ 등)
+      const PREF = { len: ['m', 'mm', 'ft', '자(尺)', 'in'], area: ['평', '㎡', 'ha', 'ft²'], vol: ['L', '㎥(루베)', 'ft³'], force: ['kN', 'tf', 'kgf', 'N'], press: ['kgf/cm²', 'MPa', 'kPa', 'psi'] }[k];
+      const top = [...PREF, ...rows.map(([u]) => u)].filter((u, i, a) => u !== from && a.indexOf(u) === i).slice(0, 4);
+      $('out').innerHTML = kpi(top.map((u, i) => [u, fmt(rows.find((r) => r[0] === u)[1]), i === 0 ? 'main' : '']));
+      $('chart').innerHTML = '';
+      $('tables').innerHTML = table(`${fmt(val)} ${from} 환산표`, ['단위', '값'], rows.map(([u, v]) => ({ cls: u === from ? 'now' : '', cells: [u, fmt(v)] })));
     },
   };
 

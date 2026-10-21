@@ -277,3 +277,4 @@ details[open] > summary::after { content: '−'; }
 .report { margin: 8px 0 0; font-size: .92rem; }
 .report a { color: var(--ink2); }
 @media (max-width: 640px) { .contact .form { grid-template-columns: 1fr; } }
+.fw { display: contents; }
