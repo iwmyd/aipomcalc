@@ -96,7 +96,7 @@
     const s = favBtn.dataset.fav, upd = () => favBtn.setAttribute('aria-pressed', favs().includes(s));
     upd();
     favBtn.addEventListener('click', () => { const f = favs(); const on = !f.includes(s); store.set('favs', on ? [s, ...f] : f.filter((x) => x !== s)); upd(); toast(on ? '즐겨찾기에 추가했어요' : '즐겨찾기에서 뺐어요'); });
-    const rec = store.get('recent', []).filter((x) => x !== s); store.set('recent', [s, ...rec].slice(0, 12)); // 넉넉히 저장, 홈에서는 화면 폭에 맞춰 2줄까지만
+    const rec = store.get('recent', []).filter((x) => x !== s); store.set('recent', [s, ...rec].slice(0, 12)); // 넉넉히 저장, 홈에서는 화면 폭에 맞춰 1줄만
   }
   if (page === 'home') {
     const tileOf = (s) => { const t = qs(`.cat .tile[href="/${s}/"]`); return t ? t.outerHTML : ''; };
@@ -104,8 +104,8 @@
     if (f.length) { $('favs').innerHTML = f.map(tileOf).join(''); $('favs-wrap').hidden = false; }
     if (r.length) { $('recent').innerHTML = r.map(tileOf).join(''); $('recent-wrap').hidden = false; }
     if (f.length || r.length) $('mine').hidden = false;
-    // 최근 사용은 가로 2줄까지만: 지금 화면의 열 수 × 2 개만 보이고 나머지는 숨김 (창 크기가 바뀌면 다시 계산)
-    const g = $('recent'), fit = () => { if (!r.length) return; const n = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length || 1; [...g.children].forEach((t, i) => { t.style.display = i < n * 2 ? '' : 'none'; }); };
+    // 최근 사용은 가로 1줄만: 지금 화면의 열 수만큼만 보이고 나머지는 숨김 (창 크기가 바뀌면 다시 계산)
+    const g = $('recent'), fit = () => { if (!r.length) return; const n = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length || 1; [...g.children].forEach((t, i) => { t.style.display = i < n ? '' : 'none'; }); };
     fit(); let rf; addEventListener('resize', () => { clearTimeout(rf); rf = setTimeout(fit, 160); });
   }
 
