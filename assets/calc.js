@@ -214,6 +214,8 @@
   const Y2026 = {
     pension: 0.0475, pensionMin: 410000, pensionMax: 6590000, // 국민연금 근로자 4.75%, 기준소득월액 하·상한
     health: 0.03595, care: 0.1314, employ: 0.009,             // 건강보험 근로자 3.595%, 장기요양 = 건보료×13.14%, 고용보험 0.9%
+    employBoss: 0.0025,                                       // 고용안정·직업능력개발(회사만, 150인 미만 0.25%)
+    bizTax: 0.03, dailyDed: 150000,                           // 사업소득 원천징수 3%(+지방 0.3%), 일용근로 근로소득공제 일 15만 원
     minWage: 10320,                                           // 2026 최저임금(시간급)
     ubMax: 68100, ubRate: 0.6, ubMinRatio: 0.8,               // 구직급여 1일 상한, 평균임금 60%, 하한 = 최저임금 80%
   };
@@ -259,11 +261,37 @@
   }
 
   /** 시급·주휴수당: 주 15시간 이상이면 주휴시간 = min(8, 주 소정근로시간/40×8). 월 환산 = (주 시간+주휴)×365/7/12 (반올림) */
-  function wage(hourly, hoursPerDay, daysPerWeek) {
+  function wage(hourly, hoursPerDay, daysPerWeek, opt) {
     const weekHours = hoursPerDay * daysPerWeek;
     const holidayHours = weekHours >= 15 ? Math.min(8, (Math.min(weekHours, 40) / 40) * 8) : 0;
     const monthHours = Math.round(((weekHours + holidayHours) * 365) / 7 / 12);
-    return { weekHours, holidayHours, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
+    const base = { weekHours, holidayHours, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
+    return opt ? Object.assign(base, wageNet(hourly, hoursPerDay, daysPerWeek, holidayHours, monthHours, opt)) : base;
+  }
+  /** 시급 월급의 공제. opt: { tax: 'earned'(근로소득 간이세액) | 'biz'(사업소득 3.3%) | 'daily'(일용근로) | 'none',
+   *  pension·health·employ: 가입 여부, family: 부양가족(본인 포함), probation: 수습 90%, absentDays: 한 달 결근 일수 }
+   *  결근일은 서로 다른 주로 가정(그 주 주휴수당 없음). 3.3% 는 4대보험 대상이 아니므로 보험료 0. */
+  function wageNet(hourly, hoursPerDay, daysPerWeek, holidayHours, monthHours, opt) {
+    const rate = opt.probation ? hourly * 0.9 : hourly;
+    const absent = Math.max(0, Math.min(opt.absentDays || 0, Math.round(daysPerWeek * 365 / 7 / 12)));
+    const lostWork = absent * hoursPerDay * rate, lostHoliday = Math.min(absent, 5) * holidayHours * rate;
+    const gross = Math.max(0, Math.round(rate * monthHours - lostWork - lostHoliday));
+    const ins = opt.tax !== 'biz' && opt.tax !== 'none';
+    const pension = ins && opt.pension ? floor10(Math.min(Math.max(gross, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension) : 0;
+    const health = ins && opt.health ? floor10(gross * Y2026.health) : 0, care = floor10(health * Y2026.care);
+    const employ = ins && opt.employ ? floor10(gross * Y2026.employ) : 0;
+    let incomeTax = 0, localTax = 0;
+    if (opt.tax === 'earned') { incomeTax = floor10(incomeTaxYear(gross * 12, opt.family || 1, 0, pension * 12, (health + care + employ) * 12) / 12); localTax = floor10(incomeTax * 0.1); }
+    else if (opt.tax === 'biz') { incomeTax = floor10(gross * Y2026.bizTax); localTax = floor10(incomeTax * 0.1); }
+    else if (opt.tax === 'daily') { // 일 단위: (일당 − 15만 원) × 6% × 45%(세액공제 55%), 1,000원 미만 소액부징수
+      const daily = rate * hoursPerDay, t = Math.floor(Math.max(0, daily - Y2026.dailyDed) * 0.06 * 0.45);
+      const perDay = t < 1000 ? 0 : t, workDays = Math.round(daysPerWeek * 365 / 7 / 12) - absent;
+      incomeTax = floor10(perDay * workDays); localTax = floor10(Math.floor(perDay * 0.1) * workDays);
+    }
+    const deduct = pension + health + care + employ + incomeTax + localTax;
+    const boss = { pension, health, care, employ: ins && opt.employ ? floor10(gross * (Y2026.employ + Y2026.employBoss)) : 0 }; // 회사 부담(산재 별도)
+    return { rate, absent, lostWork, lostHoliday, gross, pension, health, care, employ, incomeTax, localTax, deduct, net: gross - deduct, boss,
+      bossTotal: boss.pension + boss.health + boss.care + boss.employ, rateBelowMin: rate < Y2026.minWage * (opt.probation ? 0.9 : 1) };
   }
 
   /** 글자 수: 공백 포함/제외, 줄, 단어, UTF-8 바이트, 한글 2바이트 기준(EUC-KR식) */

@@ -319,10 +319,19 @@
       $('tables').innerHTML = table('연봉별 월 실수령액 (같은 조건)', ['연봉', '월 실수령', '월 공제'], [3e7, 4e7, 5e7, 6e7, 7e7, 8e7, 1e8].map((a) => { const y = Calc.salary(a, num('nontax'), Math.round(num('family')) || 1, Math.round(num('kids'))); return { cls: Math.abs(a - num('annual')) < 1 ? 'now' : '', cells: [Charts.short(a) + '원', won(y.net), won(y.deduct)] }; }));
     },
     wage() {
-      const x = Calc.wage(num('hourly'), num('hours'), num('days'));
-      $('out').innerHTML = kpi([['월급 환산', won(x.monthPay), 'main'], ['주휴수당(주)', won(x.holidayPay)], ['주급(주휴 포함)', won(x.weekTotal)], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']]) +
-        (x.belowMin ? `<p class="note over">입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.</p>` : '') + (x.holidayHours === 0 ? '<p class="note">주 15시간 미만이라 주휴수당이 없습니다.</p>' : '');
-      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+      const opt = (tax) => ({ tax, pension: $('pension').value === '1', health: $('health').value === '1', employ: $('employ').value === '1', family: Math.round(num('family')) || 1, probation: $('probation').value === '1', absentDays: Math.round(num('absent')) });
+      const tax = $('tax').value, x = Calc.wage(num('hourly'), num('hours'), num('days'), opt(tax));
+      $('out').innerHTML = kpi([['월 실수령액', won(x.net), 'main'], ['월급(세전)', won(x.gross)], ['월 공제 합계', won(x.deduct)], ['주휴수당(주)', won(x.rate * x.holidayHours)], ['주급(주휴 포함)', won(x.rate * (x.weekHours + x.holidayHours))], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']]) +
+        (x.rateBelowMin ? `<p class="note over">${num('hourly') < Calc.Y2026.minWage ? '입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.' : '수습 감액 후 시급이 최저임금의 90%(9,288원)보다 낮습니다.'}</p>` : x.belowMin ? '<p class="note over">입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.</p>' : '') +
+        (x.holidayHours === 0 ? '<p class="note">주 15시간 미만이라 주휴수당이 없습니다.</p>' : '') +
+        (x.absent ? `<p class="note">결근 ${x.absent}일로 근무분 ${won(x.lostWork)}과 주휴수당 ${won(x.lostHoliday)}이 빠졌습니다.</p>` : '') +
+        (tax === 'biz' ? '<p class="note">3.3%는 4대보험을 떼지 않습니다. 다음 해 5월 종합소득세 신고로 세금을 정산합니다.</p>' : '') +
+        (tax !== 'biz' && tax !== 'none' && x.weekHours * 365 / 7 / 12 < 60 && (x.pension || x.health) ? '<p class="note">한 달 소정근로가 60시간 미만이면 국민연금·건강보험 직장가입 대상이 아닐 수 있습니다.</p>' : '');
+      const items = [['국민연금', x.pension], ['건강보험', x.health], ['장기요양', x.care], ['고용보험', x.employ], ['소득세', x.incomeTax], ['지방소득세', x.localTax]].filter((r) => r[1] > 0);
+      if (items.length) Charts.bars($('chart'), { title: '월급에서 빠지는 돈', horizontal: true, cats: items.map((r) => r[0]), series: [{ label: '금액', color: S.i, values: items.map((r) => r[1]) }] }); else $('chart').innerHTML = '';
+      const b = x.boss, ins = tax !== 'biz' && tax !== 'none';
+      $('tables').innerHTML = (ins && x.bossTotal ? table('4대보험 누가 얼마 내나 (월)', ['보험', '내 월급에서', '회사가 따로'], [['국민연금', won(x.pension), won(b.pension)], ['건강보험', won(x.health), won(b.health)], ['장기요양', won(x.care), won(b.care)], ['고용보험', won(x.employ), won(b.employ)], ['산재보험', '0원', '업종별 요율'], { cls: 'now', cells: ['합계', won(x.pension + x.health + x.care + x.employ), won(x.bossTotal) + ' + 산재'] }]) : '') +
+        table('세금 방식별 월 실수령액 (같은 조건)', ['방식', '월 공제', '월 실수령'], [['earned', '4대보험 + 근로소득세'], ['biz', '3.3%'], ['daily', '일용직'], ['none', '떼지 않음']].map(([k, l]) => { const y = Calc.wage(num('hourly'), num('hours'), num('days'), opt(k)); return { cls: k === tax ? 'now' : '', cells: [l, won(y.deduct), won(y.net)] }; }));
     },
     unemployment() {
       const daily = num('days3m') ? num('wage3m') / num('days3m') : 0, x = Calc.unemployment(daily, num('hours'), num('years'), $('older').value === '1');
