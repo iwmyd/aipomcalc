@@ -109,6 +109,13 @@
     fit(); let rf; addEventListener('resize', () => { clearTimeout(rf); rf = setTimeout(fit, 160); });
   }
 
+  // 문의하기: 계산기 페이지의 "알려 주세요"(?calc=slug)로 왔으면 관련 계산기를 미리 골라 둔다
+  if (page === 'contact') {
+    const slug = new URLSearchParams(location.search).get('calc'), sel = $('c-calc');
+    const o = slug && sel && qs(`option[data-slug="${CSS.escape(slug)}"]`, sel);
+    if (o) { sel.value = o.value; $('c-kind').value = '계산 오류 제보'; }
+  }
+
   // ── 4. 맨 위로·저장 기록 지우기 ──
   const top = qs('[data-totop]');
   if (top) { addEventListener('scroll', () => top.classList.toggle('on', scrollY > 600), { passive: true }); top.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' })); }

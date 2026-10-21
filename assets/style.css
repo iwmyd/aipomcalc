@@ -266,3 +266,14 @@ details[open] > summary::after { content: '−'; }
 }
 .note.over { color: #dc2626; font-weight: 600; }
 .pct-grid .form, fieldset.sub.row .form { grid-template-columns: repeat(2, minmax(0, 1fr)); } /* 짧은 숫자 칸은 모바일에서도 2열 */
+
+/* 문의하기 (2026-10-22) */
+.contact .form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.contact .f.wide { grid-column: 1 / -1; }
+.contact .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.agree { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0 4px; line-height: 1.6; color: var(--ink2); }
+.agree input { width: 20px; height: 20px; margin-top: 3px; flex: none; accent-color: var(--ink); }
+.contact .btn { border: 0; cursor: pointer; font: inherit; font-weight: 600; }
+.report { margin: 8px 0 0; font-size: .92rem; }
+.report a { color: var(--ink2); }
+@media (max-width: 640px) { .contact .form { grid-template-columns: 1fr; } }
