@@ -373,8 +373,84 @@
     return { rate, games: w + l + d, W, G, needWins, canLose };
   }
 
+  // ───────────── 추가 4종 (2026-10-22) ─────────────
+  /** 날짜 문자열(YYYY-MM-DD) → UTC 자정. k개월 뒤 같은 날(기간이 끝난 다음 날 = 연차 발생일).
+   *  그달에 같은 날이 없으면 기간은 말일에 끝나므로 다음 달 1일 (민법 제160조 제3항) */
+  const ymd = (v) => { const [y, m, d] = String(v).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  function addMonthsYmd(t, k) {
+    const d = new Date(t), y = d.getUTCFullYear(), m = d.getUTCMonth() + k, day = d.getUTCDate();
+    const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    return day > last ? Date.UTC(y, m + 1, 1) : Date.UTC(y, m, day);
+  }
+  const iso = (t) => new Date(t).toISOString().slice(0, 10);
+  /** 연차 일수 (근로기준법 제60조): n년 근속 시 15 + ⌊(n−1)/2⌋, 최대 25일 */
+  const leaveGrant = (n) => (n < 1 ? 0 : Math.min(25, 15 + Math.floor((n - 1) / 2)));
+  /** 연차 (입사일 기준, 매월 개근·연 80% 이상 출근 가정). lastDay: 마지막 근무일(재직 중이면 오늘).
+   *  발생일에 근로관계가 있어야 연차가 생긴다(대법원 2021다227100 — 1년 계약 만료 퇴사 시 15일 미발생). */
+  function annualLeave(start, lastDay, used, dailyWage) {
+    const s0 = ymd(start), e = ymd(lastDay);
+    if (!(e >= s0)) return null;
+    let monthly = 0; for (let k = 1; k <= 11; k++) if (addMonthsYmd(s0, k) <= e) monthly = k;
+    let n = 0; while (addMonthsYmd(s0, 12 * (n + 1)) <= e) n++;
+    const cur = n === 0 ? monthly : n === 1 ? monthly + leaveGrant(1) : leaveGrant(n); // 1년 차엔 아직 정산 안 된 월 단위 연차 포함
+    let total = monthly; for (let i = 1; i <= n; i++) total += leaveGrant(i);
+    const next = n === 0 && monthly < 11 ? { date: iso(addMonthsYmd(s0, monthly + 1)), days: 1 } : { date: iso(addMonthsYmd(s0, 12 * (n + 1))), days: leaveGrant(n + 1) };
+    const unused = Math.max(0, cur - (used || 0));
+    return { years: n, monthly, cur, total, next, unused, pay: unused * (dailyWage || 0), serviceDays: Math.round((e - s0) / 864e5) + 1 };
+  }
+
+  /** 중개보수 상한 (공인중개사법 시행규칙 제20조, 2021.10.19 개정 · 한국공인중개사협회 요율표).
+   *  kind: house|officetel|other, deal: sale|lease. 월세 거래금액 = 보증금 + 월세 × 100 (5천만 원 미만이면 × 70) */
+  const BROKER = {
+    sale: [[5e7, 0.006, 250000], [2e8, 0.005, 800000], [9e8, 0.004], [12e8, 0.005], [15e8, 0.006], [Infinity, 0.007]],
+    lease: [[5e7, 0.005, 200000], [1e8, 0.004, 300000], [6e8, 0.003], [12e8, 0.004], [15e8, 0.005], [Infinity, 0.006]],
+  };
+  function brokerage(kind, deal, price, deposit, monthlyRent, vatOn) {
+    let amount = deal === 'sale' ? price : deposit + monthlyRent * 100;
+    if (deal === 'lease' && monthlyRent > 0 && amount < 5e7) amount = deposit + monthlyRent * 70;
+    let rate, cap = null;
+    if (kind === 'officetel') rate = deal === 'sale' ? 0.005 : 0.004;
+    else if (kind === 'other') rate = 0.009;
+    else { const row = BROKER[deal].find(([up]) => amount < up); rate = row[1]; cap = row[2] || null; }
+    const raw = Math.floor(amount * rate), fee = cap ? Math.min(raw, cap) : raw;
+    const vat = vatOn ? Math.round(fee * 0.1) : 0;
+    return { amount, rate, cap, raw, capped: cap !== null && raw > cap, fee, vat, total: fee + vat };
+  }
+
+  /** 종합소득세 기본세율 산출세액 (소득세법 제55조) */
+  function basicTax(base) {
+    const B = [[14e6, 0.06, 0], [50e6, 0.15, 84e4], [88e6, 0.24, 624e4], [150e6, 0.35, 1536e4], [300e6, 0.38, 3706e4], [500e6, 0.40, 9406e4], [1e9, 0.42, 17406e4], [Infinity, 0.45, 38406e4]];
+    let prev = 0; for (const [up, r, acc] of B) { if (base <= up) return acc + (base - prev) * r; prev = up; } return 0;
+  }
+  /** 3.3% 프리랜서 종합소득세 환급(추정) — 단순경비율 추계. 수입 4천만 원 초과분 경비율 = 1 − (1 − 단순경비율) × 1.4
+   *  표준세액공제 7만 원(근로소득 없는 종합소득자), 인적공제 1인 150만 원. 기납부 = 수입 × 3% (+ 지방 0.3%) */
+  function freelanceTax(income, expRate, family, pensionPaid) {
+    const r = expRate, over = Math.max(0, income - 4e7);
+    const expense = Math.min(income, 4e7) * r + over * Math.max(0, 1 - (1 - r) * 1.4);
+    const earn = Math.max(0, income - expense);
+    const base = Math.max(0, earn - 1.5e6 * Math.max(1, family) - (pensionPaid || 0));
+    const calc = basicTax(base), tax = Math.max(0, Math.floor(calc) - 70000), local = Math.floor(tax * 0.1);
+    const prepaid = Math.floor(income * 0.03), prepaidLocal = Math.floor(income * 0.003);
+    const refund = prepaid + prepaidLocal - tax - local;
+    return { expense, earn, base, calc, tax, local, prepaid, prepaidLocal, refund };
+  }
+
+  /** 주택용 전기요금(저압) — 한국전력 기본공급약관. 하계(7·8월) 300/450kWh, 그 외 200/400kWh 누진 구간.
+   *  전기요금계 = 기본 + 전력량 + 기후환경 + 연료비조정. 부가세 10%(반올림), 전력기금 2.7%(10원 미만 절사), 청구액 10원 미만 절사 */
+  const ELEC = { basic: [910, 1600, 7300], rate: [120.0, 214.6, 307.3], fund: 0.027 };
+  function electricity(kwh, summer, climate, fuel) {
+    const [t1, t2] = summer ? [300, 450] : [200, 400];
+    const step = kwh <= t1 ? 0 : kwh <= t2 ? 1 : 2;
+    const parts = [Math.min(kwh, t1), Math.max(0, Math.min(kwh, t2) - t1), Math.max(0, kwh - t2)];
+    const energy = Math.floor(parts.reduce((a, q, i) => a + q * ELEC.rate[i], 0) + 1e-9);
+    const basic = ELEC.basic[step], clim = Math.floor(kwh * climate + 1e-9), fuelFee = Math.floor(kwh * fuel + 1e-9);
+    const sum = basic + energy + clim + fuelFee, vat = Math.round(sum * 0.1), fund = Math.floor(sum * ELEC.fund / 10) * 10;
+    return { step: step + 1, parts, basic, energy, clim, fuelFee, sum, vat, fund, total: Math.floor((sum + vat + fund) / 10) * 10, t1, t2 };
+  }
+
   const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
-    Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi };
+    Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
+    annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);

@@ -1,7 +1,7 @@
 /* 에이팜 종합계산기 — Minimalism & Swiss (ui-ux-pro-max 디자인 시스템), 카테고리·계산기별 tone 색, 라이트/다크
  * 글꼴: IBM Plex Sans KR · IBM Plex Mono (SIL Open Font License) */
 :root {
-  --bg: #f8fafc; --card: #ffffff; --ink: #0f172a; --ink2: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f1f5f9;
+  --bg: #f8fafc; --card: #ffffff; --ink: #0f172a; --ink2: #334155; --muted: #556274; --line: #e2e8f0; --soft: #f1f5f9;
   --ring: #0f172a; --shadow: 0 1px 2px rgb(15 23 42 / .06), 0 4px 14px rgb(15 23 42 / .05);
   --s-principal: #2563eb; --s-interest: #d97706; --s-support: #059669; /* 차트 시리즈 — dataviz validator 통과 */
   --tb: #334155; --tsb: #f1f5f9;
@@ -159,7 +159,7 @@ fieldset.sub.row .form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .kpi span { display: block; font-size: .8rem; color: var(--muted); }
 .kpi b { display: block; font-family: var(--mono); font-weight: 600; font-size: 1.15rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .kpi.main { grid-column: 1 / -1; background: var(--tone); color: var(--bg); padding: 16px 18px; }
-.kpi.main span { color: inherit; opacity: .85; }
+.kpi.main span { color: inherit; opacity: .96; }
 .kpi.main b { font-size: clamp(1.6rem, 5vw, 2.2rem); }
 .note { font-size: .85rem; color: var(--muted); margin: 10px 0 0; }
 .out h3, .viz h3 { font-size: .95rem; margin: 18px 0 8px; }
@@ -171,6 +171,7 @@ th:first-child, td:first-child { text-align: left; }
 thead th { position: sticky; top: 0; background: var(--soft); color: var(--ink2); font-weight: 600; }
 tr.now td, tr.now th { background: var(--tone-soft); font-weight: 700; }
 .tbl { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: 12px; }
+.tbl:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
 .tbl-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 18px 0 8px; flex-wrap: wrap; }
 .tbl-h h3 { margin: 0; font-size: .95rem; }
 

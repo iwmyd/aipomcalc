@@ -96,7 +96,7 @@
     const s = favBtn.dataset.fav, upd = () => favBtn.setAttribute('aria-pressed', favs().includes(s));
     upd();
     favBtn.addEventListener('click', () => { const f = favs(); const on = !f.includes(s); store.set('favs', on ? [s, ...f] : f.filter((x) => x !== s)); upd(); toast(on ? '즐겨찾기에 추가했어요' : '즐겨찾기에서 뺐어요'); });
-    const rec = store.get('recent', []).filter((x) => x !== s); store.set('recent', [s, ...rec].slice(0, 6));
+    const rec = store.get('recent', []).filter((x) => x !== s); store.set('recent', [s, ...rec].slice(0, 12)); // 넉넉히 저장, 홈에서는 화면 폭에 맞춰 2줄까지만
   }
   if (page === 'home') {
     const tileOf = (s) => { const t = qs(`.cat .tile[href="/${s}/"]`); return t ? t.outerHTML : ''; };
@@ -104,6 +104,9 @@
     if (f.length) { $('favs').innerHTML = f.map(tileOf).join(''); $('favs-wrap').hidden = false; }
     if (r.length) { $('recent').innerHTML = r.map(tileOf).join(''); $('recent-wrap').hidden = false; }
     if (f.length || r.length) $('mine').hidden = false;
+    // 최근 사용은 가로 2줄까지만: 지금 화면의 열 수 × 2 개만 보이고 나머지는 숨김 (창 크기가 바뀌면 다시 계산)
+    const g = $('recent'), fit = () => { if (!r.length) return; const n = getComputedStyle(g).gridTemplateColumns.split(' ').filter(Boolean).length || 1; [...g.children].forEach((t, i) => { t.style.display = i < n * 2 ? '' : 'none'; }); };
+    fit(); let rf; addEventListener('resize', () => { clearTimeout(rf); rf = setTimeout(fit, 160); });
   }
 
   // ── 4. 맨 위로·저장 기록 지우기 ──
@@ -126,7 +129,7 @@
     const lab = inp.closest('.f'); const hint = document.createElement('small'); hint.className = 'won'; lab.appendChild(hint);
     const big = (Number(inp.value.replace(/[^\d]/g, '')) || 0) >= 1e6; // 빠른 버튼은 큰 금액 칸(기본값 100만 원 이상)에만
     const quick = document.createElement('div'); quick.className = 'quick'; quick.hidden = !big;
-    quick.innerHTML = [['+100만', 1e6], ['+1,000만', 1e7], ['+1억', 1e8], ['0', 0]].map(([t, v]) => `<button type="button" data-add="${v}" aria-label="${t === '0' ? '금액 지우기' : t + ' 원 더하기'}">${t}</button>`).join('');
+    quick.innerHTML = [['+100만', 1e6], ['+1,000만', 1e7], ['+1억', 1e8], ['0', 0]].map(([t, v]) => `<button type="button" data-add="${v}" aria-label="${t === '0' ? '0 — 금액 지우기' : t + ' 원 더하기'}">${t}</button>`).join('');
     lab.appendChild(quick);
     const fmt = () => { const d = inp.value.replace(/[^\d]/g, ''); inp.value = d ? Number(d).toLocaleString('ko-KR') : ''; hint.textContent = Number(d) >= 1e4 ? korean(Number(d)) : ''; };
     inp.addEventListener('input', fmt); fmt();
@@ -145,7 +148,7 @@
   const table = (title, head, rows, opt = {}) => {
     const id = 't' + Math.random().toString(36).slice(2, 7);
     TABLES[id] = { title, head, rows: opt.raw || rows };
-    return `<div class="tbl-h"><h3>${title}</h3><button type="button" class="ab" data-csv="${id}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>CSV 저장</button></div><div class="tbl"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr class="${r.cls || ''}">${(r.cells || r).map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    return `<div class="tbl-h"><h3>${title}</h3><button type="button" class="ab" data-csv="${id}"><svg class="ic" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>CSV 저장</button></div><div class="tbl" tabindex="0" role="region" aria-label="${title} (좌우로 넘겨 보기)"><table><thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr class="${r.cls || ''}">${(r.cells || r).map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   };
   const TABLES = {};
   document.addEventListener('click', (e) => {
@@ -367,6 +370,48 @@
       $('out').innerHTML = kpi([['BMI ' + x.bmi.toFixed(1), x.level, 'main'], ['정상 체중 범위', x.normalMin.toFixed(1) + '~' + x.normalMax.toFixed(1) + 'kg'], ['정상 상한까지', num('weight') > x.normalMax ? '−' + (num('weight') - x.normalMax).toFixed(1) + 'kg' : '범위 안']]);
       Charts.gauge($('chart'), { title: 'BMI 위치 (0~40)', value: Math.min(1, x.bmi / 40), label: 'BMI ' + x.bmi.toFixed(1) });
       $('tables').innerHTML = table('대한비만학회 기준', ['BMI', '판정'], [['18.5 미만', '저체중'], ['18.5~22.9', '정상'], ['23~24.9', '비만 전 단계'], ['25~29.9', '1단계 비만'], ['30~34.9', '2단계 비만'], ['35 이상', '3단계 비만']].map(([a, b]) => ({ cls: b === x.level ? 'now' : '', cells: [a, b] })));
+    },
+    leave() {
+      if (!$('last').value) $('last').value = today();
+      const x = Calc.annualLeave($('start').value, $('last').value, num('used'), num('daily'));
+      $('chart').innerHTML = '';
+      if (!x) { $('out').innerHTML = '<p class="note over">마지막 근무일이 입사일보다 빠릅니다. 날짜를 확인해 주세요.</p>'; $('tables').innerHTML = ''; return; }
+      $('out').innerHTML = kpi([['지금 쓸 수 있는 연차', x.cur + '일', 'main'], ['남은 연차', x.unused + '일'], ['남은 연차 수당', won(x.pay)], ['근속', x.years + '년 (' + x.serviceDays.toLocaleString('ko-KR') + '일)'], ['입사 후 생긴 연차 합계', x.total + '일'], ['다음 연차', x.next.date + ' · ' + x.next.days + '일']]) +
+        (x.years === 1 ? `<p class="note">1년 차 월 단위 연차 ${x.monthly}일 + 1년 근속 연차 15일을 합쳤습니다. 1년 차 연차를 이미 썼다면 "쓴 연차"에 넣으세요.</p>` : '') +
+        (x.years === 0 && x.serviceDays >= 365 ? '<p class="note">1년을 채웠지만, 1년이 지난 다음 날 재직하지 않으면 15일은 생기지 않습니다.</p>' : '') +
+        (num('used') > x.cur ? '<p class="note over">쓴 연차가 지금 쓸 수 있는 연차보다 많습니다.</p>' : '');
+      const NS = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21], hot = x.years === 0 ? 0 : Math.max(...NS.filter((n) => n <= x.years)); // 지금 근속에 해당하는 줄
+      $('tables').innerHTML = table('근속 연수별 연차 일수', ['근속', '연차'], [['1년 미만', '매월 1일 (최대 11일)', 0], ...NS.map((n, i) => [n === 21 ? '21년 이상' : NS[i + 1] - n > 1 ? n + '~' + (NS[i + 1] - 1) + '년' : n + '년', Calc.leaveGrant(n) + '일', n])].map(([a, b, n]) => ({ cls: n === hot ? 'now' : '', cells: [a, b] })));
+    },
+    brokerage() {
+      const deal = $('deal').value, kind = $('kind').value;
+      const show = (id, on) => { const l = $(id).closest('label'); if (l) l.style.display = on ? '' : 'none'; };
+      show('price', deal === 'sale'); show('deposit', deal === 'lease'); show('rent', deal === 'lease');
+      const x = Calc.brokerage(kind, deal, num('price'), num('deposit'), num('rent'), $('vat').value === '1');
+      $('out').innerHTML = kpi([['중개보수 상한', won(x.total), 'main'], ['거래금액', won(x.amount)], ['상한 요율', +(x.rate * 100).toFixed(1) + '%'], ['한도액', x.cap ? won(x.cap) : '없음'], ...(x.vat ? [['부가세', won(x.vat)]] : [])]) +
+        (x.capped ? `<p class="note">요율로 계산한 ${won(x.raw)}이 한도액을 넘어 ${won(x.cap)}을 적용했습니다.</p>` : '') +
+        (deal === 'lease' && num('rent') > 0 ? `<p class="note">월세 거래금액 = 보증금 + 월세 × ${num('deposit') + num('rent') * 100 < 5e7 ? '70 (×100 환산이 5천만 원 미만이라)' : '100'}.</p>` : '') +
+        (kind === 'other' ? '<p class="note">0.9% 이내에서 협의하는 거래라 최대치로 계산했습니다.</p>' : '') + '<p class="note">파는 사람과 사는 사람(집주인과 세입자)이 각각 이 금액 안에서 냅니다.</p>';
+      $('chart').innerHTML = '';
+      const rows = Calc.BROKER[deal], lab = (lo, up) => (lo ? Charts.short(lo) + '원 이상' : '') + (up < Infinity ? (lo ? ' ~ ' : '') + Charts.short(up) + '원 미만' : '');
+      $('tables').innerHTML = kind !== 'house' ? '' : table('주택 ' + (deal === 'sale' ? '매매' : '임대차') + ' 상한 요율표', ['거래금액', '상한 요율', '한도액'], rows.map(([up, r, cap], i) => { const lo = i ? rows[i - 1][0] : 0; return { cls: x.amount >= lo && x.amount < up ? 'now' : '', cells: [lab(lo, up), +(r * 100).toFixed(1) + '%', cap ? won(cap) : '없음'] }; }));
+    },
+    freelance() {
+      const fam = Math.round(num('family')) || 1, x = Calc.freelanceTax(num('income'), num('exp') / 100, fam, num('pension'));
+      const paid = x.prepaid + x.prepaidLocal, real = x.tax + x.local;
+      $('out').innerHTML = kpi([[x.refund >= 0 ? '돌려받을 세금 (예상)' : '더 낼 세금 (예상)', won(Math.abs(x.refund)), 'main'], ['미리 낸 세금 (3.3%)', won(paid)], ['실제 세금 (지방세 포함)', won(real)], ['필요경비', won(x.expense)], ['소득금액', won(x.earn)], ['과세표준', won(x.base)]]) +
+        (num('income') > 36e6 ? '<p class="note">직전 해 수입이 3,600만 원 이상이면 단순경비율 대신 기준경비율·장부 신고 대상일 수 있어 결과가 크게 달라집니다.</p>' : '');
+      Charts.bars($('chart'), { title: '미리 낸 세금 vs 실제 세금', horizontal: true, cats: ['미리 낸 세금', '실제 세금'], series: [{ label: '금액', color: S.i, values: [paid, real] }] });
+      $('tables').innerHTML = table('수입별 예상 환급액 (같은 조건)', ['1년 수입', '미리 낸 세금', '돌려받을 세금'], [5e6, 1e7, 1.5e7, 2e7, 3e7, 3.6e7, 5e7].map((a) => { const y = Calc.freelanceTax(a, num('exp') / 100, fam, num('pension')); return { cls: Math.abs(a - num('income')) < 1 ? 'now' : '', cells: [Charts.short(a) + '원', won(y.prepaid + y.prepaidLocal), y.refund >= 0 ? won(y.refund) : '−' + won(-y.refund) + ' (추가 납부)'] }; }));
+    },
+    electricity() {
+      const kwh = Math.max(0, Math.round(num('kwh'))), summer = $('season').value === 'summer', x = Calc.electricity(kwh, summer, num('climate'), num('fuel'));
+      $('out').innerHTML = kpi([['이번 달 전기요금', won(x.total), 'main'], ['누진 단계', x.step + '단계'], ['기본요금', won(x.basic)], ['전력량요금', won(x.energy)], ['기후환경 + 연료비조정', won(x.clim + x.fuelFee)], ['부가세 + 전력기금', won(x.vat + x.fund)]]) +
+        (kwh <= x.t1 ? `<p class="note">${x.t1 - kwh}kWh 더 쓰면 2단계(기본요금 1,600원, kWh당 214.6원)가 됩니다.</p>` : kwh <= x.t2 ? `<p class="note">${x.t2 - kwh}kWh 더 쓰면 3단계(기본요금 7,300원, kWh당 307.3원)가 됩니다.</p>` : '<p class="note over">3단계 구간입니다. ' + x.t2 + 'kWh를 넘는 사용량에는 kWh당 307.3원이 붙습니다.</p>') +
+        (kwh > 1000 ? '<p class="note over">여름·겨울에 1,000kWh를 넘으면 슈퍼유저 요금이 붙어 실제 요금이 더 많습니다(이 계산에는 미반영).</p>' : '');
+      Charts.bars($('chart'), { title: '구간별 전력량요금', horizontal: true, cats: ['1단계 ' + x.parts[0] + 'kWh', '2단계 ' + x.parts[1] + 'kWh', '3단계 ' + x.parts[2] + 'kWh'], series: [{ label: '금액', color: S.i, values: x.parts.map((q, i) => Math.floor(q * Calc.ELEC.rate[i])) }] });
+      const uses = [100, 200, 300, 350, 400, 450, 500, 600];
+      $('tables').innerHTML = table('사용량별 요금 (' + (summer ? '여름' : '기타 계절') + ')', ['사용량', '단계', '청구 요금'], uses.map((u) => { const y = Calc.electricity(u, summer, num('climate'), num('fuel')); return { cls: u === kwh ? 'now' : '', cells: [u + 'kWh', y.step + '단계', won(y.total)] }; }));
     },
   };
 
