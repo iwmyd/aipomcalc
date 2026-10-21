@@ -210,7 +210,132 @@
     return { perCc, base, cut, tax, edu, total: tax + edu, half: (tax + edu) / 2 };
   }
 
-  const api = { loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax };
+  // ───────────── 2026 기준값 (출처: 각 계산기 페이지 "계산 기준") ─────────────
+  const Y2026 = {
+    pension: 0.0475, pensionMin: 410000, pensionMax: 6590000, // 국민연금 근로자 4.75%, 기준소득월액 하·상한
+    health: 0.03595, care: 0.1314, employ: 0.009,             // 건강보험 근로자 3.595%, 장기요양 = 건보료×13.14%, 고용보험 0.9%
+    minWage: 10320,                                           // 2026 최저임금(시간급)
+    ubMax: 68100, ubRate: 0.6, ubMinRatio: 0.8,               // 구직급여 1일 상한, 평균임금 60%, 하한 = 최저임금 80%
+  };
+  const floor10 = (v) => Math.floor(Math.round(v) / 10) * 10; // 소수 오차 정리 후 10원 미만 절사
+
+  /** 근로소득세(연) — 소득세법 기본세율·근로소득공제·근로소득세액공제·자녀세액공제·표준세액공제 13만 원. 간이세액표의 추정치 */
+  function incomeTaxYear(totalPay, family, kids, pensionYear, insYear) {
+    const g = totalPay;
+    const ded = g <= 5e6 ? g * 0.7 : g <= 15e6 ? 3.5e6 + (g - 5e6) * 0.4 : g <= 45e6 ? 7.5e6 + (g - 15e6) * 0.15 : g <= 1e8 ? 12e6 + (g - 45e6) * 0.05 : Math.min(2e7, 14.75e6 + (g - 1e8) * 0.02);
+    const base = Math.max(0, g - ded - 1.5e6 * Math.max(1, family) - pensionYear - insYear);
+    const B = [[14e6, 0.06, 0], [50e6, 0.15, 84e4], [88e6, 0.24, 624e4], [150e6, 0.35, 1536e4], [300e6, 0.38, 3706e4], [500e6, 0.40, 9406e4], [1e9, 0.42, 17406e4], [Infinity, 0.45, 38406e4]];
+    let prev = 0, calc = 0;
+    for (const [up, r, acc] of B) { if (base <= up) { calc = acc + (base - prev) * r; break; } prev = up; }
+    let credit = calc <= 13e5 ? calc * 0.55 : 715000 + (calc - 13e5) * 0.3;
+    const lim = g <= 33e6 ? 740000 : g <= 70e6 ? Math.max(660000, 740000 - (g - 33e6) * 0.008) : g <= 120e6 ? Math.max(500000, 660000 - (g - 70e6) * 0.5) : Math.max(200000, 500000 - (g - 120e6) * 0.5);
+    credit = Math.min(credit, lim);
+    const kidCredit = kids <= 0 ? 0 : kids === 1 ? 250000 : kids === 2 ? 550000 : 950000 + (kids - 3) * 400000;
+    return Math.max(0, calc - credit - kidCredit - 130000);
+  }
+  /** 연봉 실수령액 (월). nonTax: 월 비과세(식대 등) */
+  function salary(annual, nonTax, family, kids) {
+    const gross = annual / 12, taxable = Math.max(0, gross - nonTax);
+    const pension = floor10(Math.min(Math.max(taxable, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension);
+    const health = floor10(taxable * Y2026.health), care = floor10(health * Y2026.care), employ = floor10(taxable * Y2026.employ);
+    const incomeTax = floor10(incomeTaxYear(taxable * 12, family, kids, pension * 12, (health + care + employ) * 12) / 12);
+    const localTax = floor10(incomeTax * 0.1);
+    const deduct = pension + health + care + employ + incomeTax + localTax;
+    return { gross, taxable, pension, health, care, employ, incomeTax, localTax, deduct, net: gross - deduct, netYear: (gross - deduct) * 12 };
+  }
+
+  /** 퍼센트 4종 */
+  const percent = {
+    of: (a, p) => (a * p) / 100,                              // a의 p%
+    ratio: (a, b) => (b ? (a / b) * 100 : NaN),               // a는 b의 몇 %
+    change: (from, to) => (from ? ((to - from) / from) * 100 : NaN), // from→to 증감률
+    apply: (a, p) => a * (1 + p / 100),                       // a를 p% 늘리면(음수면 줄이면)
+  };
+
+  /** 부가세 10% (부가가치세법 제30조) */
+  function vat(amount, mode) {
+    if (mode === 'total') { const supply = Math.round(amount / 1.1); return { supply, tax: amount - supply, total: amount }; }
+    const tax = Math.round(amount * 0.1); return { supply: amount, tax, total: amount + tax };
+  }
+
+  /** 시급·주휴수당: 주 15시간 이상이면 주휴시간 = min(8, 주 소정근로시간/40×8). 월 환산 = (주 시간+주휴)×365/7/12 (반올림) */
+  function wage(hourly, hoursPerDay, daysPerWeek) {
+    const weekHours = hoursPerDay * daysPerWeek;
+    const holidayHours = weekHours >= 15 ? Math.min(8, (Math.min(weekHours, 40) / 40) * 8) : 0;
+    const monthHours = Math.round(((weekHours + holidayHours) * 365) / 7 / 12);
+    return { weekHours, holidayHours, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
+  }
+
+  /** 글자 수: 공백 포함/제외, 줄, 단어, UTF-8 바이트, 한글 2바이트 기준(EUC-KR식) */
+  function charCount(s) {
+    const chars = [...s];
+    return { withSpace: chars.length, noSpace: chars.filter((c) => !/\s/.test(c)).length, lines: s ? s.split(/\r\n|\r|\n/).length : 0, words: (s.trim().match(/\S+/g) || []).length,
+      utf8: new TextEncoder().encode(s).length, euckr: chars.reduce((n, c) => n + (c.charCodeAt(0) > 127 ? 2 : 1), 0) };
+  }
+
+  /** 평단가: rows [{price, qty}] → 평균 단가 */
+  function avgPrice(rows) {
+    const r = rows.filter((x) => x.qty > 0 && x.price >= 0);
+    const qty = r.reduce((a, x) => a + x.qty, 0), cost = r.reduce((a, x) => a + x.price * x.qty, 0);
+    return { qty, cost, avg: qty ? cost / qty : 0 };
+  }
+
+  /** 실업급여(구직급여): 1일 = 평균임금일액×60% (상한 68,100, 하한 = 최저임금×80%×1일 소정근로시간). 소정급여일수 = 고용보험법 별표1 */
+  function unemployment(dailyAvgWage, hoursPerDay, insuredYears, over50OrDisabled) {
+    const lower = Y2026.minWage * Y2026.ubMinRatio * Math.min(8, hoursPerDay);
+    const raw = dailyAvgWage * Y2026.ubRate;
+    const daily = Math.floor(Math.min(Y2026.ubMax, Math.max(lower, raw)));
+    const T = over50OrDisabled ? [120, 180, 210, 240, 270] : [120, 150, 180, 210, 240];
+    const i = insuredYears < 1 ? 0 : insuredYears < 3 ? 1 : insuredYears < 5 ? 2 : insuredYears < 10 ? 3 : 4;
+    const days = T[i];
+    return { daily, days, total: daily * days, lower, capped: raw > Y2026.ubMax, floored: raw < lower, monthly: daily * 30 };
+  }
+
+  /** 대출 갈아타기: 남은 기간 원리금균등 기준 총이자 비교 − 중도상환수수료 − 새 대출 비용 */
+  function refinance(balance, curRate, newRate, months, feeRate, feeRemain, feePeriod, newCost) {
+    const a = loan(balance, curRate, months, 'equal-payment'), b = loan(balance, newRate, months, 'equal-payment');
+    const fee = prepayFee(balance, feeRate, Math.max(0, feePeriod - feeRemain), feePeriod).fee;
+    const save = a.totalInterest - b.totalInterest, net = save - fee - newCost, monthlyDiff = a.first - b.first;
+    return { save, fee, net, curMonthly: a.first, newMonthly: b.first, monthlyDiff, payback: monthlyDiff > 0 ? Math.ceil((fee + newCost) / monthlyDiff) : Infinity };
+  }
+
+  /** 자동차 취득세 (지방세법 제12조): 비영업 승용 7%, 승합·화물 5%, 경차 4%(감면 75만 원 한도, 지방세특례제한법 2026년까지),
+   *  전기차 7%에서 140만 원 한도 감면(2026.12.31까지). 과세표준 = 취득가액(부가세 제외 공급가액). 공채 매입은 미반영 */
+  function carAcqTax(price, kind) {
+    const rate = kind === 'light' ? 0.04 : kind === 'van' ? 0.05 : 0.07;
+    const tax = floor10(price * rate), cut = kind === 'light' ? Math.min(tax, 750000) : kind === 'ev' ? Math.min(tax, 1400000) : 0;
+    return { rate, tax, cut, pay: tax - cut };
+  }
+
+  /** 청약 가점 (주택공급에 관한 규칙 별표1): 무주택 최대 32, 부양가족 최대 35, 통장 최대 17 = 84점
+   *  noHomeYears < 0 이면 유주택(0점). 배우자 통장 기간은 50%(최대 3점) 합산, 통장 점수 상한 17 */
+  function subscription(noHomeYears, dependents, accountYears, spouseYears) {
+    const home = noHomeYears < 0 ? 0 : Math.min(32, 2 + 2 * Math.floor(Math.max(0, noHomeYears)));
+    const dep = Math.min(35, 5 + 5 * Math.max(0, Math.floor(dependents)));
+    const acc = (y) => (y <= 0 ? 0 : y < 0.5 ? 1 : y < 1 ? 2 : Math.min(17, 2 + Math.floor(y)));
+    const spouse = Math.min(3, Math.floor(acc(spouseYears || 0) / 2));
+    const account = Math.min(17, acc(accountYears) + spouse);
+    return { home, dep, account, spouse, total: home + dep + account };
+  }
+
+  /** 목표 금액 모으기: 목표액·기간·연 수익률(월복리)·초기 금액 → 필요한 월 적립액 */
+  function goal(target, years, annualRate, initial) {
+    const n = Math.round(years * 12), r = annualRate / 12;
+    const fvInit = initial * Math.pow(1 + r, n);
+    const need = Math.max(0, target - fvInit);
+    const monthly = r === 0 ? need / n : (need * r) / (Math.pow(1 + r, n) - 1);
+    return { monthly, n, paid: initial + monthly * n, interest: target - (initial + monthly * n), fvInit };
+  }
+
+  /** BMI (대한비만학회 2022 기준): <18.5 저체중, ~22.9 정상, ~24.9 비만 전 단계, ~29.9 1단계 비만, ~34.9 2단계, 35+ 3단계 */
+  function bmi(heightCm, weightKg) {
+    const m = heightCm / 100, v = weightKg / (m * m);
+    const level = v < 18.5 ? '저체중' : v < 23 ? '정상' : v < 25 ? '비만 전 단계' : v < 30 ? '1단계 비만' : v < 35 ? '2단계 비만' : '3단계 비만';
+    return { bmi: v, level, normalMin: 18.5 * m * m, normalMax: 22.9 * m * m };
+  }
+
+  const api = { loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
+    Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);

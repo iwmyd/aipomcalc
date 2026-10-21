@@ -4,7 +4,7 @@
   'use strict';
   const NS = 'http://www.w3.org/2000/svg';
   let W = 720, H = 260; const M = { t: 16, r: 16, b: 30, l: 60 };
-  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || v;
+  const css = (v) => getComputedStyle(document.body).getPropertyValue(v).trim() || v; // tone 은 body 에 정의됨
   const short = (v) => { const a = Math.abs(v); if (a >= 1e8) return (v / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '') + '억'; if (a >= 1e4) return Math.round(v / 1e4).toLocaleString('ko-KR') + '만'; return Math.round(v).toLocaleString('ko-KR'); };
   const won = (v) => Math.round(v).toLocaleString('ko-KR') + '원';
   const niceMax = (m) => { if (m <= 0) return 1; const raw = m / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), n = raw / p; const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((x) => x >= n - 1e-9) * p; return step * 4; }; // 4칸 눈금이 깔끔한 수가 되도록
@@ -77,10 +77,11 @@
     const fmt = opt.fmt || won;
     if (opt.horizontal) {
       const bh = Math.min(34, ih / n - 12), lw = Math.min(90, W * 0.22); M.l = lw;
+      const hw = iw - (lw - 60) - 48; // 오른쪽 값 라벨 자리
       opt.cats.forEach((c, i) => {
         const y = M.t + (ih / n) * i + (ih / n - bh) / 2; let x = M.l;
         const lab = el('text', { class: 'lbl', x: M.l - 8, y: y + bh / 2 + 4, 'text-anchor': 'end' }, svg); lab.textContent = c;
-        opt.series.forEach((s) => { const w = (iw * s.values[i]) / max; if (w <= 0) return; const r = el('rect', { x, y, width: Math.max(0, w - 2), height: bh, rx: 4, fill: css(s.color) }, svg); bind(r, `${c} · ${s.label} <b>${fmt(s.values[i])}</b>`, x + w / 2, y); x += w; });
+        opt.series.forEach((s) => { const w = (hw * s.values[i]) / max; if (w <= 0) return; const r = el('rect', { x, y, width: Math.max(0, w - 2), height: bh, rx: 4, fill: css(s.color) }, svg); bind(r, `${c} · ${s.label} <b>${fmt(s.values[i])}</b>`, x + w / 2, y); x += w; });
         const v = el('text', { class: 'lbl', x: Math.min(x + 6, W - M.r), y: y + bh / 2 + 4 }, svg); v.textContent = short(tot[i]);
       });
     } else {

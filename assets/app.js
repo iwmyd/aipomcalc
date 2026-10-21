@@ -96,10 +96,11 @@
   };
   qsa('input[data-money]').forEach((inp) => {
     const lab = inp.closest('.f'); const hint = document.createElement('small'); hint.className = 'won'; lab.appendChild(hint);
-    const quick = document.createElement('div'); quick.className = 'quick';
+    const big = (Number(inp.value.replace(/[^\d]/g, '')) || 0) >= 1e6; // 빠른 버튼은 큰 금액 칸(기본값 100만 원 이상)에만
+    const quick = document.createElement('div'); quick.className = 'quick'; quick.hidden = !big;
     quick.innerHTML = [['+100만', 1e6], ['+1,000만', 1e7], ['+1억', 1e8], ['0', 0]].map(([t, v]) => `<button type="button" data-add="${v}" aria-label="${t === '0' ? '금액 지우기' : t + ' 원 더하기'}">${t}</button>`).join('');
     lab.appendChild(quick);
-    const fmt = () => { const d = inp.value.replace(/[^\d]/g, ''); inp.value = d ? Number(d).toLocaleString('ko-KR') : ''; hint.textContent = korean(Number(d)); };
+    const fmt = () => { const d = inp.value.replace(/[^\d]/g, ''); inp.value = d ? Number(d).toLocaleString('ko-KR') : ''; hint.textContent = Number(d) >= 1e4 ? korean(Number(d)) : ''; };
     inp.addEventListener('input', fmt); fmt();
     quick.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; const add = Number(b.dataset.add); const cur = Number(inp.value.replace(/[^\d]/g, '')) || 0; inp.value = String(add ? cur + add : 0); fmt(); inp.dispatchEvent(new Event('input', { bubbles: true })); });
   });
@@ -235,13 +236,100 @@
       $('out').innerHTML = kpi([['만 나이', x.man + '세', 'main'], ['연 나이', x.year + '세'], ['세는 나이', x.counting + '세'], ['다음 생일까지', 'D-' + Calc.dday(t, next).diff]]);
       $('chart').innerHTML = ''; $('tables').innerHTML = '';
     },
+
+    // ── 추가 12종 ──
+    percent() {
+      const n = (v, d = 2) => (isFinite(v) ? (+v.toFixed(d)).toLocaleString('ko-KR', { maximumFractionDigits: d }) : '—');
+      const a1 = num('p1a'), b1 = num('p1b'), a2 = num('p2a'), b2 = num('p2b'), a3 = num('p3a'), b3 = num('p3b'), a4 = num('p4a'), b4 = num('p4b');
+      const c = Calc.percent.change(a3, b3), r4 = Calc.percent.apply(a4, b4);
+      $('o1').textContent = `${n(a1)}의 ${n(b1)}% = ${n(Calc.percent.of(a1, b1), 4)}`;
+      $('o2').textContent = `${n(a2)}은(는) ${n(b2)}의 ${n(Calc.percent.ratio(a2, b2))}%`;
+      $('o3').textContent = isFinite(c) ? `${c >= 0 ? '+' : '−'}${n(Math.abs(c))}% ${c >= 0 ? '증가' : '감소'} (차이 ${n(b3 - a3)})` : '처음 값이 0이면 계산할 수 없어요';
+      $('o4').textContent = `${n(r4)} (${b4 >= 0 ? '+' : '−'}${n(Math.abs(r4 - a4))})`;
+      // 결과는 각 질문 아래에 바로 표시 (결과 상자 없음)
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+    },
+    charcount() {
+      const x = Calc.charCount($('text').value), lim = num('limit');
+      const left = lim ? lim - x.withSpace : null;
+      $('out').innerHTML = kpi([['공백 포함', x.withSpace.toLocaleString('ko-KR') + '자', 'main'], ['공백 제외', x.noSpace.toLocaleString('ko-KR') + '자'], ['단어', x.words.toLocaleString('ko-KR') + '개'], ['줄', x.lines.toLocaleString('ko-KR') + '줄'], ['바이트(UTF-8)', x.utf8.toLocaleString('ko-KR')], ['바이트(한글 2)', x.euckr.toLocaleString('ko-KR')]]) +
+        (left === null ? '' : `<p class="note ${left < 0 ? 'over' : ''}">${left >= 0 ? `목표까지 ${left.toLocaleString('ko-KR')}자 남았어요.` : `목표보다 ${(-left).toLocaleString('ko-KR')}자 많아요.`}</p>`);
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+    },
+    refinance() {
+      const x = Calc.refinance(num('balance'), num('curRate') / 100, num('newRate') / 100, Math.round(num('months')), num('feeRate') / 100, Math.round(num('feeRemain')), Math.round(num('feePeriod')), num('newCost'));
+      $('out').innerHTML = kpi([[x.net >= 0 ? '갈아타면 아끼는 돈(순이익)' : '갈아타면 손해', won(Math.abs(x.net)), 'main'], ['이자 절감액', won(x.save)], ['중도상환수수료', won(x.fee)], ['월 상환액 차이', signed(-x.monthlyDiff)], ['본전 회수', isFinite(x.payback) ? x.payback + '개월' : '-']]) +
+        `<p class="note">${x.net >= 0 ? '수수료와 비용을 빼도 이득입니다.' : '수수료·비용이 이자 절감액보다 커서 지금은 손해입니다.'}</p>`;
+      Charts.bars($('chart'), { title: '이자 절감 vs 비용', horizontal: true, cats: ['이자 절감', '수수료+비용'], series: [{ label: '금액', color: S.p, values: [x.save, x.fee + num('newCost')] }] });
+      $('tables').innerHTML = table('월 상환액 비교 (원리금균등)', ['구분', '월 상환액'], [['지금 대출', won(x.curMonthly)], ['새 대출', won(x.newMonthly)], ['차이', signed(x.newMonthly - x.curMonthly)]]);
+    },
+    goal() {
+      const yrs = num('years'), x = Calc.goal(num('target'), yrs, num('rate') / 100, num('initial'));
+      $('out').innerHTML = kpi([['매달 모아야 할 돈', won(x.monthly), 'main'], ['총 넣는 돈', won(x.paid)], ['이자로 채워지는 돈', won(Math.max(0, x.interest))], ['기간', yrs + '년 (' + x.n + '개월)']]);
+      const series = []; let bal = num('initial'), paid = bal; const r = num('rate') / 100 / 12;
+      for (let m = 1; m <= x.n; m++) { bal = bal * (1 + r) + x.monthly; paid += x.monthly; if (m % 12 === 0 || m === x.n) series.push({ y: +(m / 12).toFixed(1), p: paid, i: bal - paid }); }
+      Charts.area($('chart'), { title: '목표까지 쌓이는 과정', x: series.map((s) => s.y), xLabel: (i) => series[i].y + '년', series: [{ label: '넣은 돈', color: S.p, values: series.map((s) => s.p) }, { label: '이자', color: S.i, values: series.map((s) => Math.max(0, s.i)) }] });
+      $('tables').innerHTML = table('기간별 필요 월 적립액', ['기간', '월 적립액'], [3, 5, 7, 10, 15, 20].map((y) => [y + '년', won(Calc.goal(num('target'), y, num('rate') / 100, num('initial')).monthly)]));
+    },
+    avgprice() {
+      const rows = [1, 2, 3, 4, 5].map((i) => ({ price: num('pr' + i), qty: num('q' + i) }));
+      const x = Calc.avgPrice(rows), now = num('now');
+      const pl = now && x.qty ? (now - x.avg) * x.qty : null;
+      $('out').innerHTML = kpi([['평균 단가(평단가)', won(x.avg), 'main'], ['총 수량', x.qty.toLocaleString('ko-KR') + '주'], ['총 매입액', won(x.cost)], ...(pl === null ? [] : [['현재가 기준 손익', signed(pl)], ['수익률', ((now / x.avg - 1) * 100).toFixed(2) + '%']])]);
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+    },
+    caracq() {
+      const x = Calc.carAcqTax(num('price'), $('kind').value);
+      $('out').innerHTML = kpi([['내야 할 취득세', won(x.pay), 'main'], ['세율', (x.rate * 100) + '%'], ['감면 전 세액', won(x.tax)], ['감면액', won(x.cut)]]) + (x.pay === 0 ? '<p class="note">감면 한도 안이라 취득세가 없습니다.</p>' : '');
+      $('chart').innerHTML = '';
+      $('tables').innerHTML = table('차 종류별 비교 (같은 가격)', ['차 종류', '세율', '감면', '납부액'], [['승용', 'car'], ['승합·화물', 'van'], ['경차', 'light'], ['전기차', 'ev']].map(([l, k]) => { const y = Calc.carAcqTax(num('price'), k); return { cls: k === $('kind').value ? 'now' : '', cells: [l, y.rate * 100 + '%', won(y.cut), won(y.pay)] }; }));
+    },
+    salary() {
+      const x = Calc.salary(num('annual'), num('nontax'), Math.round(num('family')) || 1, Math.round(num('kids')));
+      $('out').innerHTML = kpi([['월 실수령액', won(x.net), 'main'], ['연 실수령액', won(x.netYear)], ['월 공제 합계', won(x.deduct)], ['월 세전 급여', won(x.gross)]]);
+      Charts.bars($('chart'), { title: '월급에서 빠지는 돈', horizontal: true, cats: ['국민연금', '건강보험', '장기요양', '고용보험', '소득세', '지방소득세'], series: [{ label: '금액', color: S.i, values: [x.pension, x.health, x.care, x.employ, x.incomeTax, x.localTax] }] });
+      $('tables').innerHTML = table('연봉별 월 실수령액 (같은 조건)', ['연봉', '월 실수령', '월 공제'], [3e7, 4e7, 5e7, 6e7, 7e7, 8e7, 1e8].map((a) => { const y = Calc.salary(a, num('nontax'), Math.round(num('family')) || 1, Math.round(num('kids'))); return { cls: Math.abs(a - num('annual')) < 1 ? 'now' : '', cells: [Charts.short(a) + '원', won(y.net), won(y.deduct)] }; }));
+    },
+    wage() {
+      const x = Calc.wage(num('hourly'), num('hours'), num('days'));
+      $('out').innerHTML = kpi([['월급 환산', won(x.monthPay), 'main'], ['주휴수당(주)', won(x.holidayPay)], ['주급(주휴 포함)', won(x.weekTotal)], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']]) +
+        (x.belowMin ? `<p class="note over">입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.</p>` : '') + (x.holidayHours === 0 ? '<p class="note">주 15시간 미만이라 주휴수당이 없습니다.</p>' : '');
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+    },
+    unemployment() {
+      const daily = num('days3m') ? num('wage3m') / num('days3m') : 0, x = Calc.unemployment(daily, num('hours'), num('years'), $('older').value === '1');
+      $('out').innerHTML = kpi([['실업급여 총액', won(x.total), 'main'], ['1일 지급액', won(x.daily)], ['받는 일수', x.days + '일'], ['한 달(30일) 기준', won(x.monthly)]]) +
+        (x.capped ? '<p class="note">평균임금의 60%가 상한(68,100원)을 넘어 상한액으로 계산했습니다.</p>' : x.floored ? `<p class="note">평균임금의 60%가 하한보다 낮아 하한액(${won(x.lower)})으로 계산했습니다.</p>` : '') +
+        (num('years') < 0.5 ? '<p class="note over">가입 기간 180일 미만이면 받을 수 없습니다.</p>' : '');
+      $('chart').innerHTML = '';
+      $('tables').innerHTML = table('받는 일수 (고용보험법 별표1)', ['가입 기간', '50세 미만', '50세 이상·장애인'], [['1년 미만', 120, 120], ['1~3년', 150, 180], ['3~5년', 180, 210], ['5~10년', 210, 240], ['10년 이상', 240, 270]].map((r) => r.map((c, i) => (i ? c + '일' : c))));
+    },
+    vat() {
+      const x = Calc.vat(num('amount'), $('mode').value);
+      $('out').innerHTML = kpi([[$('mode').value === 'total' ? '공급가액' : '합계금액', won($('mode').value === 'total' ? x.supply : x.total), 'main'], ['공급가액', won(x.supply)], ['부가세(10%)', won(x.tax)], ['합계금액', won(x.total)]]);
+      $('chart').innerHTML = ''; $('tables').innerHTML = '';
+    },
+    subscription() {
+      const owned = $('owned').value === '1'; $('home').disabled = owned;
+      const x = Calc.subscription(owned ? -1 : num('home'), num('dep'), num('acc'), num('spouse'));
+      $('out').innerHTML = kpi([['청약 가점', x.total + '점 / 84점', 'main'], ['무주택 기간', x.home + ' / 32점'], ['부양가족', x.dep + ' / 35점'], ['통장 기간', x.account + ' / 17점' + (x.spouse ? ` (배우자 +${x.spouse})` : '')]]);
+      Charts.bars($('chart'), { title: '항목별 점수', horizontal: true, cats: ['무주택', '부양가족', '통장'], series: [{ label: '내 점수', color: S.p, values: [x.home, x.dep, x.account] }, { label: '남은 점수', color: S.i, values: [32 - x.home, 35 - x.dep, 17 - x.account] }] });
+      $('tables').innerHTML = '';
+    },
+    bmi() {
+      const x = Calc.bmi(num('height'), num('weight')); if (!isFinite(x.bmi)) return;
+      $('out').innerHTML = kpi([['BMI ' + x.bmi.toFixed(1), x.level, 'main'], ['정상 체중 범위', x.normalMin.toFixed(1) + '~' + x.normalMax.toFixed(1) + 'kg'], ['정상 상한까지', num('weight') > x.normalMax ? '−' + (num('weight') - x.normalMax).toFixed(1) + 'kg' : '범위 안']]);
+      Charts.gauge($('chart'), { title: 'BMI 위치 (0~40)', value: Math.min(1, x.bmi / 40), label: 'BMI ' + x.bmi.toFixed(1) });
+      $('tables').innerHTML = table('대한비만학회 기준', ['BMI', '판정'], [['18.5 미만', '저체중'], ['18.5~22.9', '정상'], ['23~24.9', '비만 전 단계'], ['25~29.9', '1단계 비만'], ['30~34.9', '2단계 비만'], ['35 이상', '3단계 비만']].map(([a, b]) => ({ cls: b === x.level ? 'now' : '', cells: [a, b] })));
+    },
   };
 
   // ── 9. 입력값 저장·복원·공유·초기화 ──
   const calcEl = qs('[data-calc]'), kind = calcEl && calcEl.dataset.calc;
-  const fields = calcEl ? qsa('input,select', calcEl).filter((e) => e.id && !['expr'].includes(e.id)) : [];
+  const fields = calcEl ? qsa('input,select,textarea', calcEl).filter((e) => e.id && !['expr'].includes(e.id)) : [];
+  const saved = fields.filter((e) => e.dataset.nosave === undefined); // 글자 수 세기 본문 등은 저장·공유 제외
   const defaults = Object.fromEntries(fields.map((e) => [e.id, e.value]));
-  const snapshot = () => Object.fromEntries(fields.map((e) => [e.id, e.value]));
+  const snapshot = () => Object.fromEntries(saved.map((e) => [e.id, e.value]));
   const apply = (vals) => fields.forEach((e) => { if (vals[e.id] !== undefined) e.value = vals[e.id]; if (e.dataset.money !== undefined) e.dispatchEvent(new Event('input')); });
   const params = new URLSearchParams(location.search);
   if (kind && run[kind]) {
@@ -269,6 +357,7 @@
   qsa('[data-copy-result]').forEach((b) => b.addEventListener('click', () => {
     const h1 = qs('h1').textContent, lines = qsa('.kpi').map((k) => `${qs('span', k).textContent}: ${qs('b', k).textContent}`);
     const res = $('res'); if (res && !lines.length) lines.push(`${$('expr').value} = ${res.textContent}`);
+    if (!lines.length) lines.push(...qsa('.pct-out').map((p) => p.textContent)); // 퍼센트 계산기
     copy(`[${h1}]\n${lines.join('\n')}\n${shareUrl()}`, '결과를 복사했어요');
   }));
   qsa('[data-reset]').forEach((b) => b.addEventListener('click', () => { apply(defaults); store.del('in-' + kind); history.replaceState(null, '', location.pathname); rerender(); toast('처음 값으로 돌렸어요'); }));
