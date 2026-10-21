@@ -278,3 +278,23 @@ details[open] > summary::after { content: '−'; }
 .report a { color: var(--ink2); }
 @media (max-width: 640px) { .contact .form { grid-template-columns: 1fr; } }
 .fw { display: contents; }
+
+/* 건축·토목 결과 그림 (2026-10-22) */
+.diagram { margin: 14px 0 6px; }
+.diagram svg { display: block; width: 100%; height: auto; max-height: 340px; }
+.diagram figcaption { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+.dg-shape { fill: var(--tone-soft); stroke: var(--tone); stroke-width: 2; stroke-linejoin: round; }
+.dg-top { fill: color-mix(in oklab, var(--tone) 22%, var(--card)); }
+.dg-side { fill: color-mix(in oklab, var(--tone) 34%, var(--card)); }
+.dg-dim { stroke: var(--ink2); stroke-width: 1.2; fill: none; }
+.dg-arrow { fill: var(--ink2); }
+.dg-dash { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; fill: none; }
+.dg-ref { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 2 4; fill: none; }
+.dg-joint { stroke: color-mix(in oklab, var(--tone) 40%, transparent); stroke-width: 1; fill: none; }
+.dg-open { fill: var(--card); stroke: var(--ink2); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.dg-acc-line { stroke: var(--tone); stroke-width: 2; fill: none; }
+.dg-t { fill: var(--ink2); font-size: 13px; font-family: var(--mono); paint-order: stroke; stroke: var(--card); stroke-width: 3px; stroke-linejoin: round; }
+.dg-small { font-size: 11px; }
+.dg-acc { fill: var(--tone); font-weight: 600; }
+.dg-truck { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+.dg-fill { fill: var(--tone); stroke: var(--tone); stroke-width: 1.5; }
