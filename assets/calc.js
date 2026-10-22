@@ -319,6 +319,91 @@
     return { daily, days, total: daily * days, lower, capped: raw > Y2026.ubMax, floored: raw < lower, monthly: daily * 30 };
   }
 
+  /** 육아휴직 급여 (고용보험법 시행령 제95조, 2025.1.1~ 시행분 — 고용24 안내 2025-09-15 확인). 월 통상임금 기준, 하한 월 70만 원.
+   *  일반: 1~3개월 100%(상한 250만), 4~6개월 100%(200만), 7개월~ 80%(160만)
+   *  부모 함께(6+6): 생후 18개월 이내 자녀, 부모가 공통으로 쓴 첫 6개월까지 100% — 상한 250·250·300·350·400·450만
+   *  한부모: 1~3개월 100%(상한 300만), 이후 일반과 같음 */
+  const PL = { cap: [250e4, 250e4, 250e4, 200e4, 200e4, 200e4], after: 160e4, floor: 70e4, six: [250e4, 250e4, 300e4, 350e4, 400e4, 450e4], single: 300e4 };
+  function parentalLeave(wage, months, kind, together) {
+    const rows = [];
+    for (let m = 1; m <= months; m++) {
+      const rate = m <= 6 ? 1 : 0.8; let cap = m <= 6 ? PL.cap[m - 1] : PL.after, how = '일반';
+      if (kind === 'six' && m <= Math.min(6, together)) { cap = PL.six[m - 1]; how = '부모 함께'; } else if (kind === 'single' && m <= 3) { cap = PL.single; how = '한부모'; }
+      const raw = wage * rate, pay = Math.floor(Math.max(PL.floor, Math.min(cap, raw)));
+      rows.push({ m, rate, cap, pay, how, capped: raw > cap, floored: raw < PL.floor });
+    }
+    return { rows, total: rows.reduce((a, r) => a + r.pay, 0) };
+  }
+
+  /** 주택 취득세 — 유상거래(매매) 기준. 지방세법 제11조①8호(1~3%)·제13조의2(다주택 중과 8·12%), 지방교육세(제151조), 농어촌특별세(전용 85㎡ 이하 비과세),
+   *  생애최초 감면(지방세특례제한법 제36조의3: 12억 이하, 200만 원 한도 — 소형·인구감소지역 주택 300만 원 한도, 2028.12.31까지).
+   *  homes: 이번에 사는 집을 포함한 주택 수(일시적 2주택은 1로). 6~9억 세율 = (가액×2/3억 − 3)/100, 소수점 넷째 자리까지(다섯째에서 반올림) */
+  function homeAcqTax(price, homes, adjusted, small85, first, firstSmall) {
+    let rate, heavy = true;
+    if (homes >= 4 || (homes === 3 && adjusted)) rate = 0.12;
+    else if (homes === 3 || (homes === 2 && adjusted)) rate = 0.08;
+    else { heavy = false; rate = price <= 6e8 ? 0.01 : price <= 9e8 ? Math.round((price * 2 / 3e8 - 3) / 100 * 1e4) / 1e4 : 0.03; }
+    const fl = (v) => Math.floor(v + 1e-6); // 소수 오차(267,999,999.99…) 정리 후 원 미만 절사
+    const acqRaw = fl(price * rate);
+    const firstOk = first && !heavy && homes === 1 && price <= 12e8;
+    const relief = firstOk ? Math.min(acqRaw, firstSmall ? 300e4 : 200e4) : 0;
+    const acq = acqRaw - relief;
+    const edu = fl(heavy ? price * 0.004 : price * rate * 0.1);
+    const rural = small85 ? 0 : fl(heavy ? price * (rate - 0.02) * 0.1 : price * 0.002);
+    return { rate, heavy, acqRaw, relief, firstOk, acq, edu, rural, total: acq + edu + rural };
+  }
+
+  /** 연말정산 (2026년 귀속 — 소득세법, 조세특례제한법 2026 개정 반영). 간이 추정: 주택자금·중소기업 감면·고향사랑기부금 등은 빠짐 */
+  const YE = { kidAge: 9 }; // 2026년 자녀세액공제 대상 나이(2017년 이전 출생, 소득세법 제59조의2 부칙)
+  function earnedDeduction(g) { return g <= 5e6 ? g * 0.7 : g <= 15e6 ? 3.5e6 + (g - 5e6) * 0.4 : g <= 45e6 ? 7.5e6 + (g - 15e6) * 0.15 : g <= 1e8 ? 12e6 + (g - 45e6) * 0.05 : Math.min(2e7, 14.75e6 + (g - 1e8) * 0.02); }
+  function basicTax(base) {
+    const B = [[14e6, 0.06, 0], [50e6, 0.15, 84e4], [88e6, 0.24, 624e4], [150e6, 0.35, 1536e4], [300e6, 0.38, 3706e4], [500e6, 0.40, 9406e4], [1e9, 0.42, 17406e4], [Infinity, 0.45, 38406e4]];
+    let prev = 0; for (const [up, r, acc] of B) { if (base <= up) return acc + (base - prev) * r; prev = up; } return 0;
+  }
+  function earnedCredit(calc, g) {
+    const c = calc <= 13e5 ? calc * 0.55 : 715000 + (calc - 13e5) * 0.3;
+    const lim = g <= 33e6 ? 740000 : g <= 70e6 ? Math.max(660000, 740000 - (g - 33e6) * 0.008) : g <= 120e6 ? Math.max(500000, 660000 - (g - 70e6) * 0.5) : Math.max(200000, 500000 - (g - 120e6) * 0.5);
+    return Math.min(c, lim);
+  }
+  /** 신용카드 등 소득공제 (조세특례제한법 제126조의2): 총급여 25% 초과분. 신용 15%, 체크·현금영수증 30%, 도서·공연·체육(7천만 이하) 30%, 전통시장·대중교통 40%.
+   *  기본 한도 300만(7천만 이하)/250만, 자녀 1명 350/275만, 2명 이상 400/300만(2026 사용분부터). 추가 한도: 전통시장·대중교통(·문화) 300만/200만 */
+  function cardDeduction(g, credit, debit, culture, market, transit, kids) {
+    if (g > 7e7) { credit += culture; culture = 0; }
+    const min = g * 0.25, gross = credit * 0.15 + (debit + culture) * 0.3 + (market + transit) * 0.4;
+    const sub = min <= credit ? min * 0.15 : min <= credit + debit + culture ? credit * 0.15 + (min - credit) * 0.3 : credit * 0.15 + (debit + culture) * 0.3 + (min - credit - debit - culture) * 0.4;
+    const total = Math.max(0, gross - sub), lim = (g <= 7e7 ? [3e6, 3.5e6, 4e6] : [2.5e6, 2.75e6, 3e6])[Math.min(2, Math.max(0, kids))];
+    const basic = Math.min(total, lim), extra = Math.min(total - basic, (market + transit) * 0.4 + culture * 0.3, g <= 7e7 ? 3e6 : 2e6);
+    return { used: credit + debit + culture + market + transit, min, total, basic, extra, ded: basic + extra, lim };
+  }
+  function yearEnd(o) {
+    const g = Math.max(0, o.pay), earnDed = earnedDeduction(g), earnInc = g - earnDed;
+    const pension = Math.floor(Math.min(Math.max(g / 12, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension) * 12;
+    const health = g * Y2026.health, ins = Math.floor(health + health * Y2026.care + g * Y2026.employ);
+    const personal = 1.5e6 * Math.max(1, o.family) + 1e6 * o.elder + 2e6 * o.disabled;
+    const card = cardDeduction(g, o.credit, o.debit, o.culture, o.market, o.transit, o.kidsAll);
+    const house = g <= 7e7 && o.houseOk ? Math.min(o.house, 3e6) * 0.4 : 0;
+    const other = Math.min(2.5e7, card.ded + house); // 소득공제 종합한도 2,500만 원(조특법 제132조의2)
+    const kidN = o.kidsCredit, kid = kidN <= 0 ? 0 : kidN === 1 ? 25e4 : kidN === 2 ? 55e4 : 55e4 + (kidN - 2) * 40e4;
+    const birth = [0, 30e4, 50e4, 70e4][o.birth] || 0, marry = o.marry ? 50e4 : 0;
+    const pRate = g <= 55e6 ? 0.15 : 0.12, pBase = Math.min(9e6, Math.min(6e6, o.pensionSave) + o.irp), pensionCr = pBase * pRate;
+    const th = g * 0.03, gen = Math.min(7e6, Math.max(0, o.medOther - th)), self = Math.max(0, o.medSelf - Math.max(0, th - o.medOther));
+    const special = Math.min(1e6, o.insure) * 0.12 + (gen + self) * 0.15 + o.edu * 0.15 + (o.donate <= 1e7 ? o.donate * 0.15 : 15e5 + (o.donate - 1e7) * 0.3);
+    const rent = g <= 8e7 ? Math.min(1e7, o.rent) * (g <= 55e6 ? 0.17 : 0.15) : 0;
+    // useSpecial: 보험료 소득공제·특별세액공제·월세 공제를 받는 쪽 / 아니면 표준세액공제 13만 원 — 둘 중 세금이 적은 쪽. extras=false 는 기납부세액 추정용(기본 공제만)
+    const run = (useSpecial, extras = true) => {
+      const base = Math.max(0, earnInc - personal - pension - (useSpecial ? ins : 0) - (extras ? other : 0));
+      const calc = basicTax(base), ec = earnedCredit(calc, g), x = extras ? 1 : 0;
+      const credits = { earned: ec, kid, birth: birth * x, marry: marry * x, pension: pensionCr * x, special: useSpecial ? special * x : 0, rent: useSpecial ? rent * x : 0, standard: useSpecial ? 0 : 13e4 };
+      for (const k in credits) credits[k] = Math.floor(credits[k] + 1e-6); // 원 미만 버림 (소수 오차 정리)
+      const sum = Object.values(credits).reduce((a, v) => a + v, 0);
+      return { base, calc, credits, creditSum: Math.min(calc, sum), tax: Math.floor(Math.max(0, calc - sum)) };
+    };
+    const A = run(true), B = run(false), best = B.tax < A.tax ? B : A;
+    const paid = o.paid >= 0 ? o.paid : Math.min(run(true, false).tax, run(false, false).tax); // 비우면: 기본 공제만 반영한 세액을 미리 냈다고 가정
+    const tax = best.tax, local = Math.floor(tax * 0.1), paidLocal = Math.floor(paid * 0.1);
+    return { g, earnDed, earnInc, pension, ins, personal, card, house, other, ...best, standard: best === B, paid, paidEstimated: !(o.paid >= 0), local, paidLocal, refund: paid + paidLocal - tax - local };
+  }
+
   /** 대출 갈아타기: 남은 기간 원리금균등 기준 총이자 비교 − 중도상환수수료 − 새 대출 비용 */
   function refinance(balance, curRate, newRate, months, feeRate, feeRemain, feePeriod, newCost) {
     const a = loan(balance, curRate, months, 'equal-payment'), b = loan(balance, newRate, months, 'equal-payment');
@@ -569,7 +654,7 @@
     Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
     annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
     PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert,
-    FC_COUPONS, fcFee, parseBP, korBP };
+    FC_COUPONS, fcFee, parseBP, parentalLeave, homeAcqTax, yearEnd, cardDeduction, korBP };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);

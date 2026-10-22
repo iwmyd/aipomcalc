@@ -352,6 +352,44 @@
       $('chart').innerHTML = '';
       $('tables').innerHTML = table('받는 일수 (고용보험법 별표1)', ['가입 기간', '50세 미만', '50세 이상·장애인'], [['1년 미만', 120, 120], ['1~3년', 150, 180], ['3~5년', 180, 210], ['5~10년', 210, 240], ['10년 이상', 240, 270]].map((r) => r.map((c, i) => (i ? c + '일' : c))));
     },
+    parental() {
+      const kind = $('pkind').value; showFor([kind]);
+      const months = Math.min(18, Math.max(1, Math.round(num('pmonths')) || 1)), x = Calc.parentalLeave(num('pwage'), months, kind, Math.round(num('ptogether')));
+      const first = x.rows[0], late = x.rows.find((r) => r.m >= 7);
+      $('out').innerHTML = kpi([['육아휴직 급여 총액', won(x.total), 'main'], ['한 달 평균', won(x.total / months)], ['첫 달', won(first.pay)], ['7개월째부터 매달', late ? won(late.pay) : '—']]) +
+        (months > 12 ? '<p class="note">1년을 넘는 기간(최대 1년 6개월)은 부모가 같은 자녀로 각각 3개월 이상 쓰는 등 조건을 채워야 합니다.</p>' : '') +
+        (x.rows.some((r) => r.floored) ? '<p class="note">통상임금 기준 금액이 하한(월 70만 원)보다 적은 달은 70만 원으로 계산했습니다.</p>' : '');
+      Charts.bars($('chart'), { title: '달마다 받는 육아휴직 급여', cats: x.rows.map((r) => r.m + '개월'), series: [{ label: '급여', color: S.p, values: x.rows.map((r) => r.pay) }], fmt: (v) => won(v) });
+      $('tables').innerHTML = table('월별 육아휴직 급여', ['기간', '적용', '지급률', '상한액', '받는 금액'], x.rows.map((r) => ({ cls: r.capped ? 'now' : '', cells: [r.m + '개월째', r.how, Math.round(r.rate * 100) + '%', won(r.cap), won(r.pay)] })));
+    },
+    homeacq() {
+      const price = num('hprice'), homes = Number($('hhomes').value), adj = $('hadj').value === '1', small = $('harea').value === '1', fv = $('hfirst').value;
+      const x = Calc.homeAcqTax(price, homes, adj, small, fv !== '0', fv === '2');
+      const pct = (r) => String(Math.round(r * 10000) / 100) + '%';
+      $('out').innerHTML = kpi([['총 납부 세액', won(x.total), 'main'], ['취득세 (' + pct(x.rate) + ')', won(x.acq)], ['지방교육세', won(x.edu)], ['농어촌특별세', small ? '비과세' : won(x.rural)], ['합계 세율', price ? pct(x.total / price) : '—']]) +
+        (x.relief ? `<p class="note">생애최초 감면 ${won(x.relief)}을 뺐습니다. 3년 안에 팔거나 임대하면 추징됩니다.</p>` : fv !== '0' && !x.firstOk ? '<p class="note over">생애최초 감면은 처음 산 집(1주택)이 12억 원 이하일 때만 받을 수 있어 빼지 않았습니다.</p>' : '') +
+        (x.heavy ? '<p class="note">다주택 중과세율입니다. 일시적 2주택이나 중과 제외 주택이면 1~3%가 될 수 있습니다.</p>' : '');
+      Charts.bars($('chart'), { title: '세금 구성', horizontal: true, cats: ['취득세', '지방교육세', '농어촌특별세'], series: [{ label: '금액', color: S.p, values: [x.acq, x.edu, x.rural] }], fmt: (v) => won(v) });
+      const row = (h, a, l) => { const y = Calc.homeAcqTax(price, h, a, small, false, false); return { cls: h === homes && (h === 1 || h === 4 || a === adj) ? 'now' : '', cells: [l, pct(y.rate), won(y.total)] }; };
+      $('tables').innerHTML = table('주택 수·지역별 세금 (같은 집값, 감면 전)', ['경우', '취득세율', '총 납부 세액'], [row(1, false, '1주택'), row(2, false, '2주택 · 조정대상지역 아님'), row(2, true, '2주택 · 조정대상지역'), row(3, false, '3주택 · 조정대상지역 아님'), row(3, true, '3주택 · 조정대상지역'), row(4, false, '4주택 이상')]);
+    },
+    yearend() {
+      const v = (id) => Math.max(0, num(id)), paidRaw = String($('ypaid').value).trim();
+      const o = { pay: v('ypay'), paid: paidRaw === '' ? -1 : v('ypaid'), family: Math.max(1, Math.round(num('yfam'))), kidsAll: Math.round(v('ykids')), kidsCredit: Math.round(v('ykidc')), elder: Math.round(v('yold')), disabled: Math.round(v('ydis')),
+        birth: Number($('ybirth').value), marry: $('ymarry').value === '1', credit: v('ycredit'), debit: v('ydebit'), market: v('ymarket'), transit: v('ytransit'), culture: v('yculture'),
+        pensionSave: v('ysave'), irp: v('yirp'), houseOk: $('yhouse').value === '1', house: v('yhamt'), insure: v('yins'), medSelf: v('ymeds'), medOther: v('ymedo'), edu: v('yedu'), donate: v('ydon'), rent: v('yrent') };
+      const x = Calc.yearEnd(o), back = x.refund >= 0;
+      $('out').innerHTML = kpi([[back ? '예상 환급액' : '예상 추가 납부액', won(Math.abs(x.refund)), 'main'], ['결정세액 (소득세)', won(x.tax)], ['미리 낸 소득세', won(x.paid) + (x.paidEstimated ? ' (추정)' : '')], ['지방소득세 포함 결정세액', won(x.tax + x.local)]]) +
+        '<p class="note">환급액은 소득세와 지방소득세(소득세의 10%)를 합친 금액입니다.</p>' +
+        (x.paidEstimated ? '<p class="note over">미리 낸 소득세를 비워 두어 기본 공제만 반영한 세액으로 추정했습니다. 급여명세서의 소득세 1년 합계를 넣으면 더 정확합니다.</p>' : '') +
+        (x.standard ? '<p class="note">보험료·의료비 등 공제보다 표준세액공제 13만 원이 더 유리해 표준세액공제로 계산했습니다.</p>' : '') +
+        (o.kidsCredit > o.kidsAll ? '<p class="note over">2017년 이전에 태어난 자녀 수가 전체 자녀 수보다 많습니다.</p>' : '');
+      const c = x.credits, L = [['근로소득세액공제', c.earned], ['자녀', c.kid], ['출산·입양', c.birth], ['결혼', c.marry], ['연금저축·IRP', c.pension], ['보험·의료·교육·기부', c.special], ['월세', c.rent], ['표준세액공제', c.standard]].filter((r) => r[1] > 0);
+      Charts.bars($('chart'), { title: '세액공제 내역', horizontal: true, cats: L.map((r) => r[0]), series: [{ label: '공제액', color: S.p, values: L.map((r) => r[1]) }], fmt: (v) => won(v) });
+      $('tables').innerHTML = table('계산 과정', ['단계', '금액'], [['총급여', won(x.g)], ['− 근로소득공제', won(x.earnDed)], ['− 인적공제', won(x.personal)], ['− 국민연금 (추정)', won(x.pension)], ...(x.standard ? [] : [['− 건강·고용보험 (추정)', won(x.ins)]]),
+        ['− 신용카드 등 공제', won(x.card.ded)], ...(x.house ? [['− 주택청약 공제', won(x.house)]] : []), { cls: 'now', cells: ['= 과세표준', won(x.base)] }, ['산출세액', won(x.calc)], ['− 세액공제 합계', won(x.creditSum)], { cls: 'now', cells: ['= 결정세액', won(x.tax)] }]) +
+        table('신용카드 등 공제', ['항목', '금액'], [['사용액 합계', won(x.card.used)], ['공제 문턱 (총급여 25%)', won(x.card.min)], ['기본 공제 (한도 ' + won(x.card.lim) + ')', won(x.card.basic)], ['추가 공제 (전통시장·대중교통 등)', won(x.card.extra)]]);
+    },
     vat() {
       const x = Calc.vat(num('amount'), $('mode').value);
       $('out').innerHTML = kpi([[$('mode').value === 'total' ? '공급가액' : '합계금액', won($('mode').value === 'total' ? x.supply : x.total), 'main'], ['공급가액', won(x.supply)], ['부가세(10%)', won(x.tax)], ['합계금액', won(x.total)]]);
