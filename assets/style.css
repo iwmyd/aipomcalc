@@ -367,3 +367,4 @@ details[open] > summary::after { content: '−'; }
 [data-calc="photo"] .fw .form { margin-top: 12px; }
 @media (max-width: 560px) { .chks { grid-template-columns: 1fr; } }
 .sum-note { display: inline-block; margin-top: 4px; font-size: .85rem; color: var(--muted); }
+.fc-guide { margin: 12px 0 0; color: var(--ink2); font-size: .92rem; }

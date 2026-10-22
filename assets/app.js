@@ -529,17 +529,22 @@
       const pct = (a, b) => (b ? (Number(a * 100000n / b) / 1000).toFixed(2) + '%' : '0%');
       $('chart').innerHTML = '';
       if (mode === 'sell') {
-        const rows = Array.from({ length: n }, (_, k) => ({ price: P($('fcp' + (k + 1)).value), coupon: cp('fcc' + (k + 1), 'fcx' + (k + 1)), cap: P($('fcm' + (k + 1)).value) }));
+        // 전체 판매 금액 = 쿠폰 쓴 선수들 + 나머지(쿠폰 없음). 선수 칸은 전체 금액 안에서 쿠폰을 따로 적용할 몫
+        const players = Array.from({ length: n }, (_, k) => ({ no: k + 1, price: P($('fcp' + (k + 1)).value), coupon: cp('fcc' + (k + 1), 'fcx' + (k + 1)), cap: P($('fcm' + (k + 1)).value) })).filter((r) => r.price > 0n);
+        const total = P($('ftot').value), sum = players.reduce((a, r) => a + r.price, 0n), rest = total > sum ? total - sum : 0n;
+        const rows = [...players, ...(rest ? [{ price: rest, coupon: 0, cap: 0n }] : [])], names = [...players.map((r) => '선수 ' + r.no), ...(rest ? [players.length ? '나머지 (쿠폰 없음)' : '전체 (쿠폰 없음)'] : [])];
         const x = Calc.fcFee(rows, pc, top);
-        if (!x.gross) { $('out').innerHTML = '<p class="note">판매 금액을 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
+        if (!x.gross) { $('out').innerHTML = '<p class="note">전체 판매 금액을 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
+        const overSum = sum > total;
         const over = rows.some((r) => r.coupon + N > 100), capped = x.each.some((e) => e.capped);
         $('out').innerHTML = kpi([['받는 BP', K(x.receive) + ' BP', 'main'], ['판매 금액 합계', K(x.gross)], ['기본 수수료 40%', '−' + K(x.base)], [`PC방·TOP CLASS 할인 ${N}%`, '+' + K(x.disc)], ['쿠폰 할인', '+' + K(x.coupon)], ['최종 수수료', '−' + K(x.final)], ['실제 수수료율', pct(x.final, x.gross)]]) +
           `<p class="note">숫자로: ${x.receive.toLocaleString('ko-KR')} BP</p>` +
+          (overSum ? `<p class="note over">선수 판매 금액의 합(${K(sum)})이 전체 판매 금액${total ? '(' + K(total) + ')' : ''}보다 커서, 선수 금액의 합을 전체 판매 금액으로 계산했습니다.</p>` : '') +
           (over ? `<p class="note">쿠폰과 기본 할인을 합쳐 100%를 넘는 쿠폰은 ${100 - N}%까지만 적용했습니다.</p>` : '') +
           (capped ? '<p class="note over">최대 할인 금액에 걸린 쿠폰이 있습니다. 아래 선수별 내역을 확인하세요.</p>' : '');
         if (x.final > 0n || x.receive > 0n) Charts.bars($('chart'), { title: '판매 금액이 나뉘는 모습', horizontal: true, cats: ['판매 금액'], series: [{ label: '받는 BP', color: S.p, values: [Number(x.receive)] }, { label: '최종 수수료', color: S.i, values: [Number(x.final)] }], fmt: (v) => K(BigInt(Math.round(v))) });
         const noCp = Calc.fcFee(rows.map((r) => ({ ...r, coupon: 0 })), pc, top);
-        $('tables').innerHTML = (n > 1 || rows[0].coupon ? table('선수별 내역', ['선수', '판매 금액', '쿠폰', '쿠폰 할인', '받는 BP'], x.each.map((e, i) => ({ cls: e.capped ? 'now' : '', cells: [`선수 ${i + 1}`, K(e.amt), e.I ? e.I + '%' : '—', e.capped ? `${K(e.coupon)} (한도, 원래 ${K(e.couponRaw)})` : K(e.coupon), K(e.receive)] }))) : '') +
+        $('tables').innerHTML = (players.length ? table('선수별 내역', ['선수', '판매 금액', '쿠폰', '쿠폰 할인', '받는 BP'], x.each.map((e, i) => ({ cls: e.capped ? 'now' : '', cells: [names[i], K(e.amt), e.I ? e.I + '%' : '—', e.capped ? `${K(e.coupon)} (한도, 원래 ${K(e.couponRaw)})` : K(e.coupon), K(e.receive)] }))) : '') +
           table('할인 조건별로 받는 BP', ['조건', '기본 할인', '최종 수수료', '받는 BP'], [...CASES.map(([l, a, b]) => { const y = Calc.fcFee(rows, a, b); return { cls: !!a === pc && !!b === top ? 'now' : '', cells: [l + (!!a === pc && !!b === top ? ' (지금)' : ''), y.N + '%', K(y.final), K(y.receive)] }; }),
             ...(x.coupon ? [['쿠폰 효과 (지금 조건)', '—', '−' + K(x.coupon), '+' + K(x.receive - noCp.receive)]] : [])]);
       } else {
