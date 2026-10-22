@@ -519,42 +519,33 @@
       $('tables').innerHTML = table(`${fmt(val)} ${from} 환산표`, ['단위', '값'], rows.map(([u, v]) => ({ cls: u === from ? 'now' : '', cells: [u, fmt(v)] })));
     },
     fc() {
-      const mode = $('fmode').value, pc = $('fpc').checked, top = $('ftop').checked, K = Calc.korBP, P = Calc.parseBP;
+      const pc = $('fpc').checked, top = $('ftop').checked, K = Calc.korBP, P = Calc.parseBP;
       const n = Math.min(10, Math.max(1, Math.round(num('fcn')) || 1)); $('fcn').value = n;
       qsa('.fc-row').forEach((r) => { r.hidden = +r.dataset.row > n; });
       const cp = (sid, xid) => ($(sid).value === 'x' ? Math.max(0, Math.min(100, num(xid))) : Number($(sid).value));
-      const tok = [mode]; for (let i = 1; i <= n; i++) if ($('fcc' + i).value === 'x') tok.push('cx' + i); if ($('ftc').value === 'x') tok.push('tcx'); showFor(tok);
+      const tok = []; for (let i = 1; i <= n; i++) if ($('fcc' + i).value === 'x') tok.push('cx' + i); showFor(tok);
       qsa('[data-bp]').forEach((e) => { const h = $(e.id + '-k'); if (h) { const v = P(e.value); h.textContent = v ? K(v) + ' BP' : ''; } });
       const N = pc && top ? 50 : pc ? 30 : top ? 20 : 0, CASES = [['할인 없음', 0, 0], ['프리미엄 PC방', 1, 0], ['TOP CLASS', 0, 1], ['PC방 + TOP CLASS', 1, 1]];
       const pct = (a, b) => (b ? (Number(a * 100000n / b) / 1000).toFixed(2) + '%' : '0%');
       $('chart').innerHTML = '';
-      if (mode === 'sell') {
-        // 전체 판매 금액 = 쿠폰 쓴 선수들 + 나머지(쿠폰 없음). 선수 칸은 전체 금액 안에서 쿠폰을 따로 적용할 몫
-        const players = Array.from({ length: n }, (_, k) => ({ no: k + 1, price: P($('fcp' + (k + 1)).value), coupon: cp('fcc' + (k + 1), 'fcx' + (k + 1)), cap: P($('fcm' + (k + 1)).value) })).filter((r) => r.price > 0n);
-        const total = P($('ftot').value), sum = players.reduce((a, r) => a + r.price, 0n), rest = total > sum ? total - sum : 0n;
-        const rows = [...players, ...(rest ? [{ price: rest, coupon: 0, cap: 0n }] : [])], names = [...players.map((r) => '선수 ' + r.no), ...(rest ? [players.length ? '나머지 (쿠폰 없음)' : '전체 (쿠폰 없음)'] : [])];
-        const x = Calc.fcFee(rows, pc, top);
-        if (!x.gross) { $('out').innerHTML = '<p class="note">전체 판매 금액을 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
-        const overSum = sum > total;
-        const over = rows.some((r) => r.coupon + N > 100), capped = x.each.some((e) => e.capped);
-        $('out').innerHTML = kpi([['받는 BP', K(x.receive) + ' BP', 'main'], ['판매 금액 합계', K(x.gross)], ['기본 수수료 40%', '−' + K(x.base)], [`PC방·TOP CLASS 할인 ${N}%`, '+' + K(x.disc)], ['쿠폰 할인', '+' + K(x.coupon)], ['최종 수수료', '−' + K(x.final)], ['실제 수수료율', pct(x.final, x.gross)]]) +
-          `<p class="note">숫자로: ${x.receive.toLocaleString('ko-KR')} BP</p>` +
-          (overSum ? `<p class="note over">선수 판매 금액의 합(${K(sum)})이 전체 판매 금액${total ? '(' + K(total) + ')' : ''}보다 커서, 선수 금액의 합을 전체 판매 금액으로 계산했습니다.</p>` : '') +
-          (over ? `<p class="note">쿠폰과 기본 할인을 합쳐 100%를 넘는 쿠폰은 ${100 - N}%까지만 적용했습니다.</p>` : '') +
-          (capped ? '<p class="note over">최대 할인 금액에 걸린 쿠폰이 있습니다. 아래 선수별 내역을 확인하세요.</p>' : '');
-        if (x.final > 0n || x.receive > 0n) Charts.bars($('chart'), { title: '판매 금액이 나뉘는 모습', horizontal: true, cats: ['판매 금액'], series: [{ label: '받는 BP', color: S.p, values: [Number(x.receive)] }, { label: '최종 수수료', color: S.i, values: [Number(x.final)] }], fmt: (v) => K(BigInt(Math.round(v))) });
-        const noCp = Calc.fcFee(rows.map((r) => ({ ...r, coupon: 0 })), pc, top);
-        $('tables').innerHTML = (players.length ? table('선수별 내역', ['선수', '판매 금액', '쿠폰', '쿠폰 할인', '받는 BP'], x.each.map((e, i) => ({ cls: e.capped ? 'now' : '', cells: [names[i], K(e.amt), e.I ? e.I + '%' : '—', e.capped ? `${K(e.coupon)} (한도, 원래 ${K(e.couponRaw)})` : K(e.coupon), K(e.receive)] }))) : '') +
-          table('할인 조건별로 받는 BP', ['조건', '기본 할인', '최종 수수료', '받는 BP'], [...CASES.map(([l, a, b]) => { const y = Calc.fcFee(rows, a, b); return { cls: !!a === pc && !!b === top ? 'now' : '', cells: [l + (!!a === pc && !!b === top ? ' (지금)' : ''), y.N + '%', K(y.final), K(y.receive)] }; }),
-            ...(x.coupon ? [['쿠폰 효과 (지금 조건)', '—', '−' + K(x.coupon), '+' + K(x.receive - noCp.receive)]] : [])]);
-      } else {
-        const want = P($('ftg').value), c = cp('ftc', 'ftx'), cap = P($('ftm').value);
-        if (!want) { $('out').innerHTML = '<p class="note">받고 싶은 BP를 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
-        const p = Calc.fcPriceFor(want, pc, top, c, cap), y = Calc.fcFee([{ price: p, coupon: c, cap }], pc, top);
-        $('out').innerHTML = kpi([['최소 판매 금액', K(p) + ' BP', 'main'], ['그때 받는 BP', K(y.receive)], ['최종 수수료', '−' + K(y.final)], ['실제 수수료율', pct(y.final, p)]]) +
-          `<p class="note">숫자로: ${p.toLocaleString('ko-KR')} BP. 이 금액 이상에 팔리면 목표 이상을 받습니다. 게임에서 등록할 수 있는 가격 단위는 따로 확인하세요.</p>`;
-        $('tables').innerHTML = table('할인 조건별 필요한 판매 금액', ['조건', '기본 할인', '최소 판매 금액', '그때 받는 BP'], CASES.map(([l, a, b]) => { const q = Calc.fcPriceFor(want, a, b, c, cap); return { cls: !!a === pc && !!b === top ? 'now' : '', cells: [l + (!!a === pc && !!b === top ? ' (지금)' : ''), (a && b ? 50 : a ? 30 : b ? 20 : 0) + '%', K(q), K(Calc.fcFee([{ price: q, coupon: c, cap }], a, b).receive)] }; }));
-      }
+      // 전체 판매 금액 = 쿠폰 쓴 선수들 + 나머지(쿠폰 없음). 선수 칸은 전체 금액 안에서 쿠폰을 따로 적용할 몫
+      const players = Array.from({ length: n }, (_, k) => ({ no: k + 1, price: P($('fcp' + (k + 1)).value), coupon: cp('fcc' + (k + 1), 'fcx' + (k + 1)), cap: P($('fcm' + (k + 1)).value) })).filter((r) => r.price > 0n);
+      const total = P($('ftot').value), sum = players.reduce((a, r) => a + r.price, 0n), rest = total > sum ? total - sum : 0n;
+      const rows = [...players, ...(rest ? [{ price: rest, coupon: 0, cap: 0n }] : [])], names = [...players.map((r) => '선수 ' + r.no), ...(rest ? [players.length ? '나머지 (쿠폰 없음)' : '전체 (쿠폰 없음)'] : [])];
+      const x = Calc.fcFee(rows, pc, top);
+      if (!x.gross) { $('out').innerHTML = '<p class="note">전체 판매 금액을 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
+      const overSum = sum > total;
+      const over = rows.some((r) => r.coupon + N > 100), capped = x.each.some((e) => e.capped);
+      $('out').innerHTML = kpi([['받는 BP', K(x.receive) + ' BP', 'main'], ['판매 금액 합계', K(x.gross)], ['기본 수수료 40%', '−' + K(x.base)], [`PC방·TOP CLASS 할인 ${N}%`, '+' + K(x.disc)], ['쿠폰 할인', '+' + K(x.coupon)], ['최종 수수료', '−' + K(x.final)], ['실제 수수료율', pct(x.final, x.gross)]]) +
+        `<p class="note">숫자로: ${x.receive.toLocaleString('ko-KR')} BP</p>` +
+        (overSum ? `<p class="note over">선수 판매 금액의 합(${K(sum)})이 전체 판매 금액${total ? '(' + K(total) + ')' : ''}보다 커서, 선수 금액의 합을 전체 판매 금액으로 계산했습니다.</p>` : '') +
+        (over ? `<p class="note">쿠폰과 기본 할인을 합쳐 100%를 넘는 쿠폰은 ${100 - N}%까지만 적용했습니다.</p>` : '') +
+        (capped ? '<p class="note over">최대 할인 금액에 걸린 쿠폰이 있습니다. 아래 선수별 내역을 확인하세요.</p>' : '');
+      if (x.final > 0n || x.receive > 0n) Charts.bars($('chart'), { title: '판매 금액이 나뉘는 모습', horizontal: true, cats: ['판매 금액'], series: [{ label: '받는 BP', color: S.p, values: [Number(x.receive)] }, { label: '최종 수수료', color: S.i, values: [Number(x.final)] }], fmt: (v) => K(BigInt(Math.round(v))) });
+      const noCp = Calc.fcFee(rows.map((r) => ({ ...r, coupon: 0 })), pc, top);
+      $('tables').innerHTML = (players.length ? table('선수별 내역', ['선수', '판매 금액', '쿠폰', '쿠폰 할인', '받는 BP'], x.each.map((e, i) => ({ cls: e.capped ? 'now' : '', cells: [names[i], K(e.amt), e.I ? e.I + '%' : '—', e.capped ? `${K(e.coupon)} (한도, 원래 ${K(e.couponRaw)})` : K(e.coupon), K(e.receive)] }))) : '') +
+        table('할인 조건별로 받는 BP', ['조건', '기본 할인', '최종 수수료', '받는 BP'], [...CASES.map(([l, a, b]) => { const y = Calc.fcFee(rows, a, b); return { cls: !!a === pc && !!b === top ? 'now' : '', cells: [l + (!!a === pc && !!b === top ? ' (지금)' : ''), y.N + '%', K(y.final), K(y.receive)] }; }),
+          ...(x.coupon ? [['쿠폰 효과 (지금 조건)', '—', '−' + K(x.coupon), '+' + K(x.receive - noCp.receive)]] : [])]);
     },
     photo() {
       const mode = $('pmode').value, ref = $('pref').value, K = Calc.korBP;
@@ -587,7 +578,7 @@
       } else if (mode === 'fc') {
         const p = Calc.parseBP($('pbp').value); if (!p) return empty('이적시장 화면을 첨부하면 판매 금액을 찾아 넣어 드립니다. 직접 입력해도 됩니다.');
         const x = Calc.fcFee([{ price: p }], $('ppc').checked, $('ptop').checked);
-        $('out').innerHTML = kpi([['받는 BP', K(x.receive) + ' BP', 'main'], ['최종 수수료', '−' + K(x.final)], [`할인 ${x.N}%`, '+' + K(x.disc)]]) + '<p class="note">쿠폰·여러 선수 합산·목표 BP 역산은 <a href="/fc-transfer/">FC 온라인 이적시장 수수료 계산기</a>에서 할 수 있습니다.</p>';
+        $('out').innerHTML = kpi([['받는 BP', K(x.receive) + ' BP', 'main'], ['최종 수수료', '−' + K(x.final)], [`할인 ${x.N}%`, '+' + K(x.disc)]]) + '<p class="note">쿠폰·선수별 쿠폰 계산은 <a href="/fc-transfer/">FC 온라인 이적시장 수수료 계산기</a>에서 할 수 있습니다.</p>';
       } else if (mode === 'text') {
         const t = $('ptext').value; if (!t.trim()) return empty('글이 담긴 이미지(캡처)를 첨부하면 글을 읽어 글자 수를 셉니다.');
         const x = Calc.charCount(t);
@@ -630,6 +621,7 @@
 
   // ── 9. 입력값 저장·복원·공유·초기화 ──
   const calcEl = qs('[data-calc]'), kind = calcEl && calcEl.dataset.calc;
+  const SKEY = 'in-' + kind + ({ fc: '-v2' }[kind] || ''); // 입력 구조가 바뀐 계산기는 예전 저장값(옛 기본값 등)을 버린다
   const fields = calcEl ? qsa('input,select,textarea', calcEl).filter((e) => e.id && !['expr'].includes(e.id) && e.type !== 'file') : [];
   const saved = fields.filter((e) => e.dataset.nosave === undefined); // 글자 수 세기 본문 등은 저장·공유 제외
   // 체크박스는 checked 를 '1'/'' 로 저장·복원 (FC 이적시장 PC방·TOP CLASS 등)
@@ -640,18 +632,18 @@
   const apply = (vals) => fields.forEach((e) => { if (vals[e.id] !== undefined) setVal(e, vals[e.id]); if (e.dataset.money !== undefined) e.dispatchEvent(new Event('input')); });
   const params = new URLSearchParams(location.search);
   if (kind && run[kind]) {
-    if ([...params.keys()].some((k) => defaults[k] !== undefined)) apply(Object.fromEntries(params)); else apply(store.get('in-' + kind, {}));
+    if ([...params.keys()].some((k) => defaults[k] !== undefined)) apply(Object.fromEntries(params)); else apply(store.get(SKEY, {}));
   }
   let saveT = null, annT = null;
   const announce = () => { const k = qs('.kpi.main'), s = $('sr-status'); if (k && s) s.textContent = qs('span', k).textContent + ' ' + qs('b', k).textContent; const mini = qs('[data-mini]'); if (k && mini) { qs('span', mini).textContent = qs('span', k).textContent; qs('b', mini).textContent = qs('b', k).textContent; } };
   function rerender(e) {
     if (!kind || !run[kind]) return;
     try { run[kind](e); } catch (err) { console.error(err); }
-    clearTimeout(saveT); saveT = setTimeout(() => store.set('in-' + kind, snapshot()), 400);
+    clearTimeout(saveT); saveT = setTimeout(() => store.set(SKEY, snapshot()), 400);
     clearTimeout(annT); annT = setTimeout(announce, 600);
   }
   if (kind && run[kind]) {
-    addEventListener('pagehide', () => { clearTimeout(saveT); store.set('in-' + kind, snapshot()); }); // 바로 새로고침·이동해도 마지막 입력값 저장
+    addEventListener('pagehide', () => { clearTimeout(saveT); store.set(SKEY, snapshot()); }); // 바로 새로고침·이동해도 마지막 입력값 저장
     fields.forEach((e) => { e.addEventListener('input', rerender); if (e.type === 'checkbox' || e.tagName === 'SELECT') e.addEventListener('change', rerender); });
     rerender(); announce();
     let rz = null, lastW = innerWidth; addEventListener('resize', () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(rerender, 200); }); // 차트 다시 맞춤
@@ -668,7 +660,7 @@
     if (!lines.length) lines.push(...qsa('.pct-out').map((p) => p.textContent)); // 퍼센트 계산기
     copy(`[${h1}]\n${lines.join('\n')}\n${shareUrl()}`, '결과를 복사했어요');
   }));
-  qsa('[data-reset]').forEach((b) => b.addEventListener('click', () => { apply(defaults); store.del('in-' + kind); history.replaceState(null, '', location.pathname); rerender(); toast('처음 값으로 돌렸어요'); }));
+  qsa('[data-reset]').forEach((b) => b.addEventListener('click', () => { apply(defaults); store.del(SKEY); history.replaceState(null, '', location.pathname); rerender(); toast('처음 값으로 돌렸어요'); }));
   qsa('[data-print]').forEach((b) => b.addEventListener('click', () => { qsa('details').forEach((d) => (d.open = true)); print(); }));
 
   // ── 10. 일반·공학용 계산기 ──

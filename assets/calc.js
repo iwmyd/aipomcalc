@@ -548,13 +548,6 @@
     const final = base - disc - coupon;
     return { N: Number(N), gross, base, disc, coupon, final, receive: gross - final, each };
   }
-  /** 받는 BP 가 target 이상이 되는 가장 낮은 판매가. 받는 BP 는 판매가가 1 오를 때 0 또는 1 이상 늘기만 하므로 이분 탐색 */
-  function fcPriceFor(target, pc, top, coupon, cap) {
-    target = big(target); if (target <= 0n) return 0n;
-    let lo = target, hi = target * 2n + 10n; // 수수료는 많아야 40% → 받는 BP ≥ 판매가의 60%
-    while (lo < hi) { const m = (lo + hi) / 2n; if (fcFee([{ price: m, coupon, cap }], pc, top).receive >= target) hi = m; else lo = m + 1n; }
-    return lo;
-  }
   /** '1억 2,000만', '12.5억', '3,500,000', '3억 2.000만'(천 단위 점) → BigInt BP */
   function parseBP(s) {
     s = String(s == null ? '' : s).replace(/(\d)[.,](?=\d{3}(?!\d))/g, '$1').replace(/[,\s]|BP|bp/g, '');
@@ -576,7 +569,7 @@
     Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
     annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
     PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert,
-    FC_COUPONS, fcFee, fcPriceFor, parseBP, korBP };
+    FC_COUPONS, fcFee, parseBP, korBP };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Calc = api;
 })(this);
