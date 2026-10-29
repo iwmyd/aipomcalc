@@ -20,8 +20,8 @@
 <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#0f172a">
 <script>try{var t=localStorage.getItem('ac-theme');if(t)document.documentElement.dataset.theme=t;var z=localStorage.getItem('ac-zoom');if(z)document.documentElement.dataset.zoom=z}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- 웹폰트는 화면 그리기를 막지 않게 늦게 붙인다(모바일 LCP 10초대 → 개선, 2026-10-29). 오기 전엔 기기 한글 글꼴 -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+<!-- 웹폰트는 화면 그리기를 막지 않게 늦게 붙이고(display=optional), 늦으면 그 방문은 기기 한글 글꼴로 둔다 — 모바일 LCP 10초대 개선, 2026-10-29 -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=optional" onload="this.onload=null;this.rel='stylesheet'"><noscript><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=optional" rel="stylesheet"></noscript>
 <link rel="stylesheet" href="/assets/style.css?v=e18254d2">
 <meta name="google-site-verification" content="8fJsMNjd0sqmaGHMqYhyhjJIt86XgNtRdXpRI8Gaa18"><meta name="naver-site-verification" content="13c49a27996e51cb543a0dffee34e67dcaf40787">
 <meta name="google-adsense-account" content="ca-pub-8001197559123230">
