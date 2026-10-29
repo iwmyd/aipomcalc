@@ -369,3 +369,6 @@ details[open] > summary::after { content: '−'; }
 [data-calc="photo"] .fw .form { margin-top: 12px; }
 @media (max-width: 560px) { .chks { grid-template-columns: 1fr; } }
 .sum-note { display: inline-block; margin-top: 4px; font-size: .85rem; color: var(--muted); }
+
+/* 터치 기기에는 "/" 단축키가 없으니 표시하지 않는다 (2026-10-29) */
+@media (hover: none) and (pointer: coarse) { .search-btn kbd, .hero-search kbd { display: none; } }

@@ -5,6 +5,8 @@
 
   /** 대출 상환 스케줄. method: 'equal-payment'(원리금균등) | 'equal-principal'(원금균등) | 'bullet'(만기일시) */
   function loan(principal, annualRate, months, method) {
+    months = Math.min(1200, Math.round(months) || 0); // 0개월이면 빈 결과, 100년 초과는 자름 (빈칸·큰 수 입력 시 오류·멈춤 방지)
+    if (months < 1) return { rows: [], first: 0, last: 0, totalInterest: 0, totalPayment: principal };
     const r = annualRate / 12;
     const pmt = r === 0 ? principal / months : (principal * r) / (1 - Math.pow(1 + r, -months));
     const rows = [];
@@ -96,7 +98,7 @@
   /** 날짜: 두 날짜 사이 일수(b−a), 기념일식 N일째(+1), 날짜 더하기. 입력은 'YYYY-MM-DD' (UTC 기준으로 계산해 시간대 영향 제거) */
   const dayMs = 86400000;
   const toUTC = (s) => { const [y, m, d] = String(s).split('-').map(Number); return Date.UTC(y, m - 1, d); };
-  const fmt = (t) => new Date(t).toISOString().slice(0, 10);
+  const fmt = (t) => { const d = new Date(t); return isNaN(d) ? '' : d.toISOString().slice(0, 10); }; // 범위 밖 날짜는 빈칸
   function dday(from, to) { const diff = Math.round((toUTC(to) - toUTC(from)) / dayMs); return { diff, nth: diff >= 0 ? diff + 1 : diff }; }
   function addDays(from, n) { return fmt(toUTC(from) + n * dayMs); }
 

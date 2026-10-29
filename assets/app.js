@@ -8,7 +8,15 @@
   const qs = (s, r = document) => r.querySelector(s), qsa = (s, r = document) => [...r.querySelectorAll(s)];
   const won = (v) => Math.round(v).toLocaleString('ko-KR') + '원';
   const signed = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(Math.round(v)).toLocaleString('ko-KR') + '원';
-  const num = (id) => { const e = $(id); return e ? Number(String(e.value).replace(/[^\d.\-]/g, '')) || 0 : 0; };
+  // 입력칸의 min·max 를 계산에도 적용한다 (대출 기간에 큰 수를 넣으면 월별 표를 끝없이 만들어 페이지가 멈추던 문제, 2026-10-29)
+  const num = (id) => {
+    const e = $(id); if (!e) return 0;
+    let v = Number(String(e.value).replace(/[^\d.\-]/g, '')) || 0;
+    const max = e.getAttribute('max'), min = e.getAttribute('min');
+    if (max !== null && v > Number(max)) v = Number(max);
+    if (min !== null && String(e.value).trim() !== '' && v < Number(min)) v = Number(min);
+    return v;
+  };
   const store = {
     get(k, d) { try { const v = localStorage.getItem('ac-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('ac-' + k, JSON.stringify(v)); } catch (e) { /* 저장 불가 환경 */ } },
@@ -303,7 +311,8 @@
       $('tables').innerHTML = table('월 상환액 비교 (원리금균등)', ['구분', '월 상환액'], [['지금 대출', won(x.curMonthly)], ['새 대출', won(x.newMonthly)], ['차이', signed(x.newMonthly - x.curMonthly)]]);
     },
     goal() {
-      const yrs = num('years'), x = Calc.goal(num('target'), yrs, num('rate') / 100, num('initial'));
+      const yrs = num('years'); if (!yrs) return; // 기간을 비우면 계산하지 않음 (NaN 그래프 방지)
+      const x = Calc.goal(num('target'), yrs, num('rate') / 100, num('initial'));
       $('out').innerHTML = kpi([['매달 모아야 할 돈', won(x.monthly), 'main'], ['총 넣는 돈', won(x.paid)], ['이자로 채워지는 돈', won(Math.max(0, x.interest))], ['기간', yrs + '년 (' + x.n + '개월)']]);
       const series = []; let bal = num('initial'), paid = bal; const r = num('rate') / 100 / 12;
       for (let m = 1; m <= x.n; m++) { bal = bal * (1 + r) + x.monthly; paid += x.monthly; if (m % 12 === 0 || m === x.n) series.push({ y: +(m / 12).toFixed(1), p: paid, i: bal - paid }); }
