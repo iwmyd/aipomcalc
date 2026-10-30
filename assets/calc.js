@@ -262,12 +262,14 @@
     const tax = Math.round(amount * 0.1); return { supply: amount, tax, total: amount + tax };
   }
 
-  /** 시급·주휴수당: 주 15시간 이상이면 주휴시간 = min(8, 주 소정근로시간/40×8). 월 환산 = (주 시간+주휴)×365/7/12 (반올림) */
+  /** 시급·주휴수당: 주 15시간 이상이면 주휴시간 = min(8, 주 소정근로시간/40×8). 월 환산 = (주 시간+주휴)×365/7/12 (반올림)
+   *  opt.juhyu === false 면 주휴수당을 받지 않는 것으로 계산 */
+  function juhyuHours(weekHours) { return weekHours >= 15 ? Math.min(8, (Math.min(weekHours, 40) / 40) * 8) : 0; }
   function wage(hourly, hoursPerDay, daysPerWeek, opt) {
     const weekHours = hoursPerDay * daysPerWeek;
-    const holidayHours = weekHours >= 15 ? Math.min(8, (Math.min(weekHours, 40) / 40) * 8) : 0;
+    const holidayHours = opt && opt.juhyu === false ? 0 : juhyuHours(weekHours);
     const monthHours = Math.round(((weekHours + holidayHours) * 365) / 7 / 12);
-    const base = { weekHours, holidayHours, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
+    const base = { weekHours, holidayHours, juhyuEligible: juhyuHours(weekHours) > 0, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
     return opt ? Object.assign(base, wageNet(hourly, hoursPerDay, daysPerWeek, holidayHours, monthHours, opt)) : base;
   }
   /** 시급 월급의 공제. opt: { tax: 'earned'(근로소득 간이세액) | 'biz'(사업소득 3.3%) | 'daily'(일용근로) | 'none',
@@ -278,6 +280,11 @@
     const absent = Math.max(0, Math.min(opt.absentDays || 0, Math.round(daysPerWeek * 365 / 7 / 12)));
     const lostWork = absent * hoursPerDay * rate, lostHoliday = Math.min(absent, 5) * holidayHours * rate;
     const gross = Math.max(0, Math.round(rate * monthHours - lostWork - lostHoliday));
+    const workDays = Math.round(daysPerWeek * 365 / 7 / 12) - absent;
+    return Object.assign({ rate, absent, lostWork, lostHoliday }, wageDeduct(gross, rate * hoursPerDay, workDays, Object.assign({ hourly }, opt)));
+  }
+  /** 세전 월급 → 4대보험·세금. dailyPay·workDays 는 일용직 세금(일 단위 계산)에만 쓴다 */
+  function wageDeduct(gross, dailyPay, workDays, opt) {
     const ins = opt.tax !== 'biz' && opt.tax !== 'none';
     const pension = ins && opt.pension ? floor10(Math.min(Math.max(gross, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension) : 0;
     const health = ins && opt.health ? floor10(gross * Y2026.health) : 0, care = floor10(health * Y2026.care);
@@ -286,14 +293,64 @@
     if (opt.tax === 'earned') { incomeTax = floor10(incomeTaxYear(gross * 12, opt.family || 1, 0, pension * 12, (health + care + employ) * 12) / 12); localTax = floor10(incomeTax * 0.1); }
     else if (opt.tax === 'biz') { incomeTax = floor10(gross * Y2026.bizTax); localTax = floor10(incomeTax * 0.1); }
     else if (opt.tax === 'daily') { // 일 단위: (일당 − 15만 원) × 6% × 45%(세액공제 55%), 1,000원 미만 소액부징수
-      const daily = rate * hoursPerDay, t = Math.floor(Math.max(0, daily - Y2026.dailyDed) * 0.06 * 0.45);
-      const perDay = t < 1000 ? 0 : t, workDays = Math.round(daysPerWeek * 365 / 7 / 12) - absent;
-      incomeTax = floor10(perDay * workDays); localTax = floor10(Math.floor(perDay * 0.1) * workDays);
+      const t = Math.floor(Math.max(0, dailyPay - Y2026.dailyDed) * 0.06 * 0.45);
+      const perDay = t < 1000 ? 0 : t, days = Math.max(0, workDays);
+      incomeTax = floor10(perDay * days); localTax = floor10(Math.floor(perDay * 0.1) * days);
     }
     const deduct = pension + health + care + employ + incomeTax + localTax;
     const boss = { pension, health, care, employ: ins && opt.employ ? floor10(gross * (Y2026.employ + Y2026.employBoss)) : 0 }; // 회사 부담(산재 별도)
-    return { rate, absent, lostWork, lostHoliday, gross, pension, health, care, employ, incomeTax, localTax, deduct, net: gross - deduct, boss,
+    const rate = opt.probation ? opt.hourly * 0.9 : opt.hourly;
+    return { gross, pension, health, care, employ, incomeTax, localTax, deduct, net: gross - deduct, boss,
       bossTotal: boss.pension + boss.health + boss.care + boss.employ, rateBelowMin: rate < Y2026.minWage * (opt.probation ? 0.9 : 1) };
+  }
+  /** 휴일·주말 근무 가산(평소 시급 외에 더 받는 시간). mul: '1' 없음 | 'law' 1.5배·8시간 넘는 부분 2배(근로기준법 제56조 제2항) | '2' 2배 */
+  function extraHours(mul, h) { return mul === 'law' ? 0.5 * Math.min(h, 8) + Math.max(0, h - 8) : mul === '2' ? h : 0; }
+  /** 시급 — 한 달 근무일을 직접 넣거나(count) 달력에서 고른(cal) 경우.
+   *  m: { workDays, holidayDays·weekendDays(그중 공휴일·주말 근무일 — 공휴일이 우선), holidayMul, weekendMul, juhyu,
+   *       weeks: 달력 모드의 주(월~일)별 근로시간 — 없으면 근무일이 한 달에 고르게 퍼졌다고 보고 주휴를 계산 } */
+  function wageMonth(hourly, hoursPerDay, m, opt) {
+    const rate = opt.probation ? hourly * 0.9 : hourly, h = hoursPerDay, W = 365 / 7 / 12;
+    const workDays = Math.max(0, Math.round(m.workDays || 0));
+    const hol = Math.min(workDays, Math.max(0, Math.round(m.holidayDays || 0))), wkd = Math.min(workDays - hol, Math.max(0, Math.round(m.weekendDays || 0)));
+    const workHours = workDays * h, premiumHours = hol * extraHours(m.holidayMul, h) + wkd * extraHours(m.weekendMul, h);
+    let jh = 0, eligibleWeeks = 0, weekHours;
+    if (m.weeks) { m.weeks.forEach((wh) => { const x = juhyuHours(wh); if (x) eligibleWeeks++; jh += x; }); weekHours = m.weeks.length ? Math.max(...m.weeks) : 0; }
+    else { weekHours = workHours / W; jh = juhyuHours(weekHours) * W; }
+    const juhyuEligible = jh > 0; if (m.juhyu === false) jh = 0;
+    const workPay = rate * workHours, premiumPay = rate * premiumHours, juhyuPay = rate * jh;
+    const gross = Math.round(workPay + premiumPay + juhyuPay);
+    return Object.assign({ rate, workDays, holidayDays: hol, weekendDays: wkd, workHours, premiumHours, juhyuHoursMonth: jh, juhyuEligible, eligibleWeeks, weekHours,
+      workPay, premiumPay, juhyuPay, monthHours: Math.round(workHours + jh), belowMin: hourly < Y2026.minWage },
+      wageDeduct(gross, workDays ? (gross - juhyuPay) / workDays : 0, workDays, Object.assign({ hourly }, opt)));
+  }
+  /** 관공서 공휴일 — 우주항공청 2026·2027 월력요항 + 노동절·제헌절 공휴일 지정(2026.4). 달력 표시용, 해마다 새 월력요항으로 추가 */
+  const HOLIDAYS = {
+    '2026-01-01': '신정', '2026-02-16': '설 연휴', '2026-02-17': '설날', '2026-02-18': '설 연휴', '2026-03-01': '삼일절', '2026-03-02': '대체공휴일',
+    '2026-05-01': '노동절', '2026-05-05': '어린이날', '2026-05-24': '부처님오신날', '2026-05-25': '대체공휴일', '2026-06-03': '지방선거일', '2026-06-06': '현충일',
+    '2026-07-17': '제헌절', '2026-08-15': '광복절', '2026-08-17': '대체공휴일', '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴',
+    '2026-10-03': '개천절', '2026-10-05': '대체공휴일', '2026-10-09': '한글날', '2026-12-25': '기독탄신일',
+    '2027-01-01': '신정', '2027-02-06': '설 연휴', '2027-02-07': '설날', '2027-02-08': '설 연휴', '2027-02-09': '대체공휴일', '2027-03-01': '삼일절',
+    '2027-05-01': '노동절', '2027-05-03': '대체공휴일', '2027-05-05': '어린이날', '2027-05-13': '부처님오신날', '2027-06-06': '현충일',
+    '2027-07-17': '제헌절', '2027-07-19': '대체공휴일', '2027-08-15': '광복절', '2027-08-16': '대체공휴일', '2027-09-14': '추석 연휴', '2027-09-15': '추석', '2027-09-16': '추석 연휴',
+    '2027-10-03': '개천절', '2027-10-04': '대체공휴일', '2027-10-09': '한글날', '2027-10-11': '대체공휴일', '2027-12-25': '기독탄신일', '2027-12-27': '대체공휴일',
+  };
+  const HOLIDAY_YEARS = [2026, 2027];
+  const ymdOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /** 달력에서 고른 날짜(YYYY-MM-DD) → wageMonth 입력. 주휴는 일요일이 이 달에 있는 주(월~일)만 이 달 몫으로 센다(그 주의 앞 달 날짜도 근로시간에 포함) */
+  function wageCalendar(ym, dates, hoursPerDay) {
+    const [y, mo] = ym.split('-').map(Number), set = new Set(dates);
+    let workDays = 0, holidayDays = 0, weekendDays = 0;
+    const last = new Date(y, mo, 0).getDate();
+    for (let d = 1; d <= last; d++) {
+      const dt = new Date(y, mo - 1, d), k = ymdOf(dt); if (!set.has(k)) continue;
+      workDays++; if (HOLIDAYS[k]) holidayDays++; else if (dt.getDay() === 0 || dt.getDay() === 6) weekendDays++;
+    }
+    const weeks = [], first = new Date(y, mo - 1, 1);
+    for (let s = new Date(y, mo - 1, 1 + ((7 - first.getDay()) % 7)); s.getMonth() === mo - 1; s = new Date(s.getFullYear(), s.getMonth(), s.getDate() + 7)) {
+      let n = 0; for (let i = 6; i >= 0; i--) if (set.has(ymdOf(new Date(s.getFullYear(), s.getMonth(), s.getDate() - i)))) n++;
+      weeks.push(n * hoursPerDay);
+    }
+    return { workDays, holidayDays, weekendDays, weeks };
   }
 
   /** 글자 수: 공백 포함/제외, 줄, 단어, UTF-8 바이트, 한글 2바이트 기준(EUC-KR식) */
@@ -653,7 +710,7 @@
   }
 
   const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
-    Y2026, salary, incomeTaxYear, percent, vat, wage, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
+    Y2026, salary, incomeTaxYear, percent, vat, wage, wageMonth, wageCalendar, HOLIDAYS, HOLIDAY_YEARS, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
     annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
     PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert,
     FC_COUPONS, fcFee, parseBP, parentalLeave, homeAcqTax, yearEnd, cardDeduction, korBP };

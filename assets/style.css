@@ -1,5 +1,5 @@
 /* 에이팜 종합계산기 — Minimalism & Swiss (ui-ux-pro-max 디자인 시스템), 카테고리·계산기별 tone 색, 라이트/다크
- * 글꼴: IBM Plex Sans KR · IBM Plex Mono (SIL Open Font License) */
+ * 글꼴: Pretendard Variable (SIL Open Font License 1.1, assets/fonts/pretendard — 셀프 호스팅) */
 /* avoid-ai-design-ignore: C9 — #94a3b8 는 다크 모드 전용(#111827 바탕, axe 통과). avoid-ai-design-ignore: K3 — 스크롤 위에 떠 있는 고정 헤더에만 흐림. avoid-ai-design-ignore: SD4d — 가운뎃점(·)은 한국어 문장부호. avoid-ai-design-ignore: SD8 — 초록은 저축·투자 카테고리 색(카테고리별 색 구분). K7 은 이 파일의 :focus-visible 로 해결(HTML 단독 검사의 오탐). */
 :root {
   --bg: #f8fafc; --card: #ffffff; --ink: #0f172a; --ink2: #334155; --muted: #556274; --line: #e2e8f0; --soft: #f1f5f9;
@@ -7,7 +7,7 @@
   --s-principal: #2563eb; --s-interest: #d97706; --s-support: #059669; /* 차트 시리즈 — dataviz validator 통과 */
   --tb: #334155; --tsb: #f1f5f9;
   --r: 12px; --r-lg: 16px; --r-sm: 8px; --fs: 16px;
-  --sans: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; --mono: 'IBM Plex Mono', 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', ui-monospace, monospace;
+  --sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; --mono: var(--sans); /* 숫자도 같은 글꼴 + 고정폭 숫자(tnum) — 글꼴 섞임 방지 2026-10-31 */
   color-scheme: light;
 }
 /* 계산기·카테고리 색 (-700: 흰 바탕 대비 4.5:1 이상) */
@@ -55,7 +55,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
 kbd { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; padding: 0 6px; color: var(--muted); background: var(--card); }
 
-/* 헤더 */
+/* 헤더 — 고정 헤더(카테고리 줄 포함) 높이만큼 앵커 이동 위치를 띄운다. --top-h 는 app.js 가 실제 높이로 갱신 */
+html { scroll-padding-top: calc(var(--top-h, 132px) + 12px); }
 .top { position: sticky; top: 0; z-index: 20; background: color-mix(in oklab, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .bar { display: flex; align-items: center; gap: 12px; min-height: 60px; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ink); text-decoration: none; white-space: nowrap; min-height: 44px; }
@@ -89,18 +90,18 @@ kbd { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--line)
 .search-hint { margin: 0; padding: 8px 16px 12px; color: var(--muted); font-size: .8rem; }
 
 /* 홈 */
-.hero { padding: 40px 0 24px; }
-.hero h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); line-height: 1.2; margin: 0 0 8px; letter-spacing: -.02em; }
-.hero p { color: var(--ink2); margin: 0 0 20px; max-width: 640px; }
+.hero { padding: 32px 0 8px; }
+.hero h1 { font-size: clamp(1.5rem, 3.2vw, 2rem); line-height: 1.25; margin: 0 0 6px; letter-spacing: -.02em; }
+.hero p { color: var(--ink2); margin: 0 0 16px; max-width: 640px; font-size: 1.02rem; }
 .hero-search { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 640px; min-height: 56px; padding: 0 16px; border: 1.5px solid var(--line); border-radius: var(--r); background: var(--card); color: var(--muted); font-size: 1rem; }
 .hero-search span { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mine { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 8px; }
 .mine h2 { display: flex; align-items: center; gap: 6px; font-size: 1rem; margin: 16px 0 10px; }
-.cat { margin: 28px 0; }
-.cat h2 { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; margin: 0 0 12px; scroll-margin-top: 130px; }
+.cat { margin: 36px 0; }
+.cat h2 { display: flex; align-items: center; gap: 8px; font-size: 1.15rem; margin: 0 0 12px; }
 .cat h2 small { color: var(--muted); font-weight: 500; font-size: .85rem; }
-.cic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--tone-soft); color: var(--tone); }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.cic { display: grid; place-items: center; width: 24px; height: 24px; color: var(--tone); } /* 색 사각형 없이 아이콘만 (2026-10-31 홈 정리) */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; } /* PC 한 줄 5개 — 카테고리당 5개라 빈칸이 안 남는다 */
 .tile { display: flex; align-items: center; gap: 12px; padding: 14px; min-height: 72px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); text-decoration: none; color: var(--ink); transition: border-color .2s, box-shadow .2s; }
 .tile:hover { border-color: var(--tone); background: color-mix(in oklab, var(--tone-soft) 45%, var(--card)); }
 /* 홈(PC·마우스): 마우스를 올린 카드의 열이 살짝 넓어지고(같은 줄 카드는 밀려남) 높이도 살짝 커진다 — 열 계산은 app.js */
@@ -109,7 +110,7 @@ kbd { font-family: var(--mono); font-size: .75rem; border: 1px solid var(--line)
   [data-page="home"] .tile { transition: border-color .2s, box-shadow .2s, padding .32s cubic-bezier(.22, .8, .32, 1); }
   [data-page="home"] .tile.grow { padding-block: 18px; }
 }
-.tic { display: grid; place-items: center; width: 40px; height: 40px; flex: none; border-radius: var(--r-sm); background: var(--tone-soft); color: var(--tone); }
+.tic { display: grid; place-items: center; width: 24px; height: 24px; flex: none; color: var(--tone); }
 .tt { display: flex; flex-direction: column; min-width: 0; }
 .tt b { font-weight: 600; } .tt small { color: var(--muted); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -221,7 +222,7 @@ details[open] > summary::after { content: '−'; }
 .guide ul, .guide ol { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink2); }
 .guide li { margin: 0 0 4px; }
 /* 가이드(해설형 글) 페이지 — /guide/ */
-.art h2 { font-size: 1.12rem; margin: 26px 0 8px; scroll-margin-top: 120px; } .art h2:first-child { margin-top: 0; }
+.art h2 { font-size: 1.12rem; margin: 26px 0 8px; } .art h2:first-child { margin-top: 0; }
 .art-meta { color: var(--muted); font-size: .85rem; margin: -4px 0 10px; }
 .toc { margin: 0 0 16px; } .toc ol { margin: 6px 0 0; padding-left: 1.3em; } .toc li { margin: 2px 0; }
 .art-tbl { margin: 8px 0 14px; max-height: none; } .art-tbl table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: .9rem; }
@@ -230,7 +231,9 @@ details[open] > summary::after { content: '−'; }
 .art-cta { margin: 18px 0 12px; }
 .guide-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 12px; }
 @media (max-width: 640px) { .guide-list { grid-template-columns: minmax(0, 1fr); } }
-.guide-item { margin: 0; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; } .guide-item b { color: var(--ink); line-height: 1.45; }
+.guide-item { position: relative; margin: 0; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; } .guide-item b { padding-right: 84px; }
+.gcat { position: absolute; top: 12px; right: 12px; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--tone-soft); color: var(--ink2); font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.gcat::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--tone); } .guide-item b { color: var(--ink); line-height: 1.45; }
 .guide-item span { color: var(--ink2); font-size: .9rem; line-height: 1.6; } .guide-item small { color: var(--muted); font-size: .8rem; }
 
 /* 기본·공학 계산기 */
@@ -327,7 +330,7 @@ details[open] > summary::after { content: '−'; }
 @media (max-width: 560px) {
   [data-page="home"] .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   [data-page="home"] .tile { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; min-height: 0; }
-  [data-page="home"] .tic { width: 32px; height: 32px; }
+  [data-page="home"] .tic { width: 22px; height: 22px; }
   [data-page="home"] .tic .ic { width: 18px; height: 18px; }
   [data-page="home"] .tt b { font-size: .92rem; line-height: 1.35; }
   [data-page="home"] .tt small { display: none; }
@@ -384,10 +387,42 @@ details[open] > summary::after { content: '−'; }
 .pchip small { font-family: var(--sans); color: var(--muted); font-size: .72rem; }
 .pchip[aria-pressed="true"] { border-color: var(--tone); background: var(--tone-soft); font-weight: 600; }
 .praw { margin: 10px 0 0; } .praw summary { cursor: pointer; color: var(--muted); font-size: .85rem; min-height: 32px; display: flex; align-items: center; }
-.praw pre { max-height: 180px; overflow: auto; white-space: pre-wrap; font-family: var(--mono); font-size: .78rem; color: var(--ink2); background: var(--soft); border-radius: var(--r-sm); padding: 10px; margin: 6px 0 0; }
+.praw pre { max-height: 180px; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: .78rem; color: var(--ink2); background: var(--soft); border-radius: var(--r-sm); padding: 10px; margin: 6px 0 0; }
 [data-calc="photo"] .fw .form { margin-top: 12px; }
 @media (max-width: 560px) { .chks { grid-template-columns: 1fr; } }
 .sum-note { display: inline-block; margin-top: 4px; font-size: .85rem; color: var(--muted); }
 
 /* 터치 기기에는 "/" 단축키가 없으니 표시하지 않는다 (2026-10-29) */
 @media (hover: none) and (pointer: coarse) { .search-btn kbd, .hero-search kbd { display: none; } }
+
+/* 시급 계산기 달력 (근무한 날 고르기) */
+.wcal-wrap { grid-column: 1 / -1; }
+.wcal-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.wcal-head b { font-variant-numeric: tabular-nums; }
+.wcal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.wdh { text-align: center; font-size: .8rem; color: var(--muted); padding: 2px 0; }
+.wd { min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.wd small { font-size: .58rem; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.wd.hol, .wd.sun, .wdh.sun { color: #c81e1e; } .wd.sat, .wdh.sat { color: #1d4ed8; }
+.wd.out { opacity: .55; }
+.wd.on { background: var(--tone-soft); border-color: var(--tone); box-shadow: inset 0 0 0 1px var(--tone); font-weight: 700; opacity: 1; }
+.wd.on.out { opacity: .7; }
+.wcal-act { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.wcal-help { display: block; margin-top: 6px; color: var(--muted); }
+:root[data-theme="dark"] .wd.hol, :root[data-theme="dark"] .wd.sun, :root[data-theme="dark"] .wdh.sun { color: #f87171; }
+:root[data-theme="dark"] .wd.sat, :root[data-theme="dark"] .wdh.sat { color: #93c5fd; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wd.hol, :root:not([data-theme="light"]) .wd.sun, :root:not([data-theme="light"]) .wdh.sun { color: #f87171; }
+  :root:not([data-theme="light"]) .wd.sat, :root:not([data-theme="light"]) .wdh.sat { color: #93c5fd; }
+}
+
+/* 숫자 칸: 같은 글꼴에 고정폭 숫자 */
+.kpi b, td, .res, .expr, .k, .mini b, .pct-out, .ctip b, .dg-t, .history li button, .f input { font-variant-numeric: tabular-nums; }
+h1, h2, .kpi.main b, .res { letter-spacing: -0.02em; }
+
+/* 홈 카드 PC: 아이콘 위·이름·설명 2줄 — 5칸에서도 이름이 잘리지 않게 (2026-10-31) */
+@media (min-width: 561px) {
+  [data-page="home"] .tile { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; }
+  [data-page="home"] .tt b { line-height: 1.35; }
+  [data-page="home"] .tt small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.45; margin-top: 2px; }
+}

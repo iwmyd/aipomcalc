@@ -41,6 +41,14 @@
     toast(lg ? '글자를 크게 했어요' : '기본 글자 크기');
   }));
 
+  // 고정 헤더 높이 → 카테고리(/#work 등)로 이동했을 때 제목·목록이 헤더에 가리지 않게 (2026-10-31)
+  const topEl = qs('.top');
+  if (topEl) {
+    const setTopH = () => document.documentElement.style.setProperty('--top-h', topEl.offsetHeight + 'px');
+    setTopH(); if ('ResizeObserver' in window) new ResizeObserver(setTopH).observe(topEl); else addEventListener('resize', setTopH);
+    if (location.hash.length > 1) addEventListener('load', () => { const t = document.getElementById(decodeURIComponent(location.hash.slice(1))); if (t) t.scrollIntoView(); });
+  }
+
   // ── 2. 검색 (초성·별칭·오타 보정·한/영 자판 실수) — 로직은 search.js ──
   const ICONS = window.AC_ICONS || {};
   const dlg = $('search'), q = $('q'), qr = $('qr');
@@ -179,6 +187,38 @@
   const S = { p: '--s-principal', i: '--s-interest', g: '--s-support' };
   const showFor = (state) => qsa('.calc [data-show]').forEach((d) => { d.style.display = d.dataset.show.split(' ').some((t) => state.includes(t)) ? '' : 'none'; });
 
+  // 시급 계산기 달력: 고른 날짜는 숨은 입력 #wdates(쉼표 목록), 보는 달은 #wmonth — 자동 저장·공유 링크에 그대로 담긴다
+  const ymdKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const wcalMonth = () => { const v = $('wmonth') && $('wmonth').value; return /^\d{4}-\d{2}$/.test(v || '') ? v : today().slice(0, 7); };
+  const wcalDates = () => ($('wdates').value || '').split(',').filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  const renderWcal = (ym) => {
+    const box = $('wcal'); if (!box) return;
+    const [y, m] = ym.split('-').map(Number), set = new Set(wcalDates()), first = new Date(y, m - 1, 1), H = Calc.HOLIDAYS;
+    const start = new Date(y, m - 1, 1 - ((first.getDay() + 6) % 7)); // 월요일부터
+    const lastD = new Date(y, m, 0), end = new Date(y, m - 1, lastD.getDate() + ((7 - lastD.getDay()) % 7));
+    let cells = '';
+    for (let d = new Date(start); d <= end; d = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)) {
+      const k = ymdKey(d), out = d.getMonth() !== m - 1, dow = d.getDay(), hol = H[k];
+      const cls = ['wd', out ? 'out' : '', hol ? 'hol' : dow === 0 ? 'sun' : dow === 6 ? 'sat' : '', set.has(k) ? 'on' : ''].filter(Boolean).join(' ');
+      cells += `<button type="button" class="${cls}" data-wd="${k}" aria-pressed="${set.has(k)}" aria-label="${d.getMonth() + 1}월 ${d.getDate()}일${hol ? ' ' + hol : ''}${set.has(k) ? ' 근무' : ''}"${hol ? ` title="${hol}"` : ''}>${d.getDate()}${hol ? '<small>' + hol.replace('대체공휴일', '대체') + '</small>' : ''}</button>`;
+    }
+    const inMonth = wcalDates().filter((k) => k.startsWith(ym)).length, noHol = !Calc.HOLIDAY_YEARS.includes(y);
+    box.innerHTML = `<div class="wcal-head"><button type="button" class="tb" data-wnav="-1" aria-label="이전 달"><svg class="ic" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button><b>${y}년 ${m}월 · ${inMonth}일 근무</b><button type="button" class="tb" data-wnav="1" aria-label="다음 달"><svg class="ic" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button></div>
+<div class="wcal" role="group" aria-label="${y}년 ${m}월 근무한 날 (누르면 선택·해제)">${['월', '화', '수', '목', '금', '토', '일'].map((w, i) => `<span class="wdh${i === 5 ? ' sat' : i === 6 ? ' sun' : ''}" aria-hidden="true">${w}</span>`).join('')}${cells}</div>
+<div class="wcal-act"><button type="button" class="ab" data-wfill="weekday">평일 모두</button><button type="button" class="ab" data-wfill="clear">이 달 지우기</button></div>
+<small class="wcal-help">근무한 날을 누르세요. 빨간 날은 공휴일, 흐린 날은 앞뒤 달(주휴 계산용)입니다.${noHol ? ' 이 해는 공휴일 표시가 없어요(2026·2027년만).' : ''}</small>`;
+  };
+  const wcalSet = (dates) => { $('wdates').value = [...new Set(dates)].sort().join(','); rerender(); };
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-wd],[data-wnav],[data-wfill]'); if (!t || !$('wcal') || !$('wcal').contains(t)) return;
+    if (t.dataset.wd) { const k = t.dataset.wd, cur = wcalDates(); wcalSet(cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k]); qs(`[data-wd="${k}"]`, $('wcal'))?.focus(); return; }
+    if (t.dataset.wnav) { const [y, m] = wcalMonth().split('-').map(Number), d = new Date(y, m - 1 + Number(t.dataset.wnav), 1); $('wmonth').value = ymdKey(d).slice(0, 7); rerender(); return; }
+    const ym = wcalMonth(), [y, m] = ym.split('-').map(Number), rest = wcalDates().filter((k) => !k.startsWith(ym));
+    if (t.dataset.wfill === 'clear') { wcalSet(rest); toast('이 달 선택을 지웠어요'); return; }
+    const days = []; for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) { const dt = new Date(y, m - 1, d), k = ymdKey(dt); if (dt.getDay() % 6 && !Calc.HOLIDAYS[k]) days.push(k); }
+    wcalSet([...rest, ...days]); toast('공휴일을 뺀 평일을 모두 골랐어요');
+  });
+
   // ── 8. 계산기별 화면 ──
   const METHODS = [['equal-payment', '원리금균등'], ['equal-principal', '원금균등'], ['bullet', '만기일시']];
   const yearly = (rows) => { const ys = []; rows.forEach((r) => { const y = Math.ceil(r.n / 12) - 1; ys[y] = ys[y] || { p: 0, i: 0 }; ys[y].p += r.principal; ys[y].i += r.interest; }); return ys; };
@@ -238,8 +278,9 @@
       $('tables').innerHTML = '';
     },
     carloan() {
-      const price = num('price'), down = Math.min(num('down'), price), rate = num('rate') / 100, n = Math.round(num('months')), x = Calc.carLoan(price, down, rate, n);
-      $('out').innerHTML = kpi([['월 납입금', won(x.monthly), 'main'], ['할부 원금', won(x.principal)], ['총 이자', won(x.totalInterest)], ['선납금 비율', price ? (down / price * 100).toFixed(1) + '%' : '-'], ['총 지출(선납 포함)', won(x.total)]]);
+      const pctMode = $('downMode').value === 'pct'; showFor([pctMode ? 'pct' : 'won']);
+      const price = num('price'), down = Math.min(pctMode ? Math.round(price * num('downPct') / 100) : num('down'), price), rate = num('rate') / 100, n = Math.round(num('months')), x = Calc.carLoan(price, down, rate, n);
+      $('out').innerHTML = kpi([['월 납입금', won(x.monthly), 'main'], ['할부 원금', won(x.principal)], ['총 이자', won(x.totalInterest)], pctMode ? ['선납금', won(down)] : ['선납금 비율', price ? (down / price * 100).toFixed(1) + '%' : '-'], ['총 지출(선납 포함)', won(x.total)]]);
       const ratios = [0, 10, 20, 30, 40, 50], alts = ratios.map((p) => Calc.carLoan(price, price * p / 100, rate, n));
       Charts.bars($('chart'), { title: '선납금 비율별 월 납입금', cats: ratios.map((p) => `선납 ${p}%`), series: [{ label: '월 납입금', color: S.p, values: alts.map((a) => a.monthly) }] });
       $('tables').innerHTML = table('선납금 비율별 비교', ['선납 비율', '선납금', '월 납입금', '총 이자'], alts.map((a, i) => [ratios[i] + '%', won(price * ratios[i] / 100), won(a.monthly), won(a.totalInterest)])) +
@@ -340,19 +381,32 @@
       $('tables').innerHTML = table('연봉별 월 실수령액 (같은 조건)', ['연봉', '월 실수령', '월 공제'], [3e7, 4e7, 5e7, 6e7, 7e7, 8e7, 1e8].map((a) => { const y = Calc.salary(a, num('nontax'), Math.round(num('family')) || 1, Math.round(num('kids'))); return { cls: Math.abs(a - num('annual')) < 1 ? 'now' : '', cells: [Charts.short(a) + '원', won(y.net), won(y.deduct)] }; }));
     },
     wage() {
-      const opt = (tax) => ({ tax, pension: $('pension').value === '1', health: $('health').value === '1', employ: $('employ').value === '1', family: Math.round(num('family')) || 1, probation: $('probation').value === '1', absentDays: Math.round(num('absent')) });
-      const tax = $('tax').value, x = Calc.wage(num('hourly'), num('hours'), num('days'), opt(tax));
-      $('out').innerHTML = kpi([['월 실수령액', won(x.net), 'main'], ['월급(세전)', won(x.gross)], ['월 공제 합계', won(x.deduct)], ['주휴수당(주)', won(x.rate * x.holidayHours)], ['주급(주휴 포함)', won(x.rate * (x.weekHours + x.holidayHours))], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']]) +
+      const mode = $('wmode').value; showFor([mode]);
+      const opt = (tax) => ({ tax, pension: $('pension').value === '1', health: $('health').value === '1', employ: $('employ').value === '1', family: Math.round(num('family')) || 1, probation: $('probation').value === '1', absentDays: Math.round(num('absent')), juhyu: $('juhyu').value === '1' });
+      const h = num('hours');
+      let monthIn = null;
+      if (mode === 'cal') { const ym = wcalMonth(); monthIn = Calc.wageCalendar(ym, wcalDates(), h); renderWcal(ym); }
+      else if (mode === 'count') monthIn = { workDays: num('mdays'), holidayDays: num('mhol'), weekendDays: num('mwkd') };
+      const calcBy = (tax) => monthIn ? Calc.wageMonth(num('hourly'), h, Object.assign({ holidayMul: $('holMul').value, weekendMul: $('wkdMul').value, juhyu: $('juhyu').value === '1' }, monthIn), opt(tax)) : Calc.wage(num('hourly'), h, num('days'), opt(tax));
+      const tax = $('tax').value, x = calcBy(tax);
+      const head = monthIn
+        ? [['월 실수령액', won(x.net), 'main'], ['월급(세전)', won(x.gross)], ['월 공제 합계', won(x.deduct)], ['근무분', won(x.workPay)], ['주휴수당(월)', won(x.juhyuPay)], ['공휴일·주말 가산', won(x.premiumPay)], ['근무 일수', x.workDays + '일'], ['근무 시간', +x.workHours.toFixed(2) + '시간']]
+        : [['월 실수령액', won(x.net), 'main'], ['월급(세전)', won(x.gross)], ['월 공제 합계', won(x.deduct)], ['주휴수당(주)', won(x.rate * x.holidayHours)], ['주급(주휴 포함)', won(x.rate * (x.weekHours + x.holidayHours))], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']];
+      const juhyuOff = $('juhyu').value === '0';
+      $('out').innerHTML = kpi(head) +
         (x.rateBelowMin ? `<p class="note over">${num('hourly') < Calc.Y2026.minWage ? '입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.' : '수습 감액 후 시급이 최저임금의 90%(9,288원)보다 낮습니다.'}</p>` : x.belowMin ? '<p class="note over">입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.</p>' : '') +
-        (x.holidayHours === 0 ? '<p class="note">주 15시간 미만이라 주휴수당이 없습니다.</p>' : '') +
+        (juhyuOff && x.juhyuEligible ? '<p class="note">주 15시간 이상이라 원칙적으로 주휴수당 대상입니다(개근한 주). 받지 않음으로 계산했습니다.</p>' : !juhyuOff && !x.juhyuEligible ? `<p class="note">${mode === 'cal' ? '주 15시간 이상인 주가 없어' : '주 15시간 미만이라'} 주휴수당이 없습니다.</p>` : '') +
+        (mode === 'cal' && x.eligibleWeeks ? `<p class="note">주휴수당: 15시간 이상인 주 ${x.eligibleWeeks}개 (일요일이 이 달에 있는 주 기준)</p>` : '') +
+        (monthIn && (x.holidayDays || x.weekendDays) ? `<p class="note">공휴일 ${x.holidayDays}일 · 주말 ${x.weekendDays}일 근무${x.premiumPay ? ` → 가산 ${won(x.premiumPay)}` : ' (가산 없음으로 계산)'}</p>` : '') +
+        (mode === 'count' && num('mhol') + num('mwkd') > num('mdays') ? '<p class="note over">공휴일·주말 근무 일수의 합이 전체 근무 일수보다 많아, 전체 근무 일수까지만 셌습니다.</p>' : '') +
         (x.absent ? `<p class="note">결근 ${x.absent}일로 근무분 ${won(x.lostWork)}과 주휴수당 ${won(x.lostHoliday)}이 빠졌습니다.</p>` : '') +
         (tax === 'biz' ? '<p class="note">3.3%는 4대보험을 떼지 않습니다. 다음 해 5월 종합소득세 신고로 세금을 정산합니다.</p>' : '') +
-        (tax !== 'biz' && tax !== 'none' && x.weekHours * 365 / 7 / 12 < 60 && (x.pension || x.health) ? '<p class="note">한 달 소정근로가 60시간 미만이면 국민연금·건강보험 직장가입 대상이 아닐 수 있습니다.</p>' : '');
+        (tax !== 'biz' && tax !== 'none' && (monthIn ? x.workHours : x.weekHours * 365 / 7 / 12) < 60 && (x.pension || x.health) ? '<p class="note">한 달 소정근로가 60시간 미만이면 국민연금·건강보험 직장가입 대상이 아닐 수 있습니다.</p>' : '');
       const items = [['국민연금', x.pension], ['건강보험', x.health], ['장기요양', x.care], ['고용보험', x.employ], ['소득세', x.incomeTax], ['지방소득세', x.localTax]].filter((r) => r[1] > 0);
       if (items.length) Charts.bars($('chart'), { title: '월급에서 빠지는 돈', horizontal: true, cats: items.map((r) => r[0]), series: [{ label: '금액', color: S.i, values: items.map((r) => r[1]) }] }); else $('chart').innerHTML = '';
       const b = x.boss, ins = tax !== 'biz' && tax !== 'none';
       $('tables').innerHTML = (ins && x.bossTotal ? table('4대보험 누가 얼마 내나 (월)', ['보험', '내 월급에서', '회사가 따로'], [['국민연금', won(x.pension), won(b.pension)], ['건강보험', won(x.health), won(b.health)], ['장기요양', won(x.care), won(b.care)], ['고용보험', won(x.employ), won(b.employ)], ['산재보험', '0원', '업종별 요율'], { cls: 'now', cells: ['합계', won(x.pension + x.health + x.care + x.employ), won(x.bossTotal) + ' + 산재'] }]) : '') +
-        table('세금 방식별 월 실수령액 (같은 조건)', ['방식', '월 공제', '월 실수령'], [['earned', '4대보험 + 근로소득세'], ['biz', '3.3%'], ['daily', '일용직'], ['none', '떼지 않음']].map(([k, l]) => { const y = Calc.wage(num('hourly'), num('hours'), num('days'), opt(k)); return { cls: k === tax ? 'now' : '', cells: [l, won(y.deduct), won(y.net)] }; }));
+        table('세금 방식별 월 실수령액 (같은 조건)', ['방식', '월 공제', '월 실수령'], [['earned', '4대보험 + 근로소득세'], ['biz', '3.3%'], ['daily', '일용직'], ['none', '떼지 않음']].map(([k, l]) => { const y = calcBy(k); return { cls: k === tax ? 'now' : '', cells: [l, won(y.deduct), won(y.net)] }; }));
     },
     unemployment() {
       const daily = num('days3m') ? num('wage3m') / num('days3m') : 0, x = Calc.unemployment(daily, num('hours'), num('years'), $('older').value === '1');
@@ -579,7 +633,7 @@
       // 전체 판매 금액 = 쿠폰 쓴 선수들 + 나머지(쿠폰 없음). 선수 칸은 전체 금액 안에서 쿠폰을 따로 적용할 몫
       const players = Array.from({ length: n }, (_, k) => ({ no: k + 1, price: P($('fcp' + (k + 1)).value), coupon: cp('fcc' + (k + 1), 'fcx' + (k + 1)), cap: P($('fcm' + (k + 1)).value) })).filter((r) => r.price > 0n);
       const total = P($('ftot').value), sum = players.reduce((a, r) => a + r.price, 0n), rest = total > sum ? total - sum : 0n;
-      const rows = [...players, ...(rest ? [{ price: rest, coupon: 0, cap: 0n }] : [])], names = [...players.map((r) => '선수 ' + r.no), ...(rest ? [players.length ? '나머지 (쿠폰 없음)' : '전체 (쿠폰 없음)'] : [])];
+      const rows = [...players, ...(rest ? [{ price: rest, coupon: 0, cap: 0n }] : [])], names = [...players.map((r) => '쿠폰 사용 선수 ' + r.no), ...(rest ? [players.length ? '나머지 (쿠폰 없음)' : '전체 (쿠폰 없음)'] : [])];
       const x = Calc.fcFee(rows, pc, top);
       if (!x.gross) { $('out').innerHTML = '<p class="note">전체 판매 금액을 넣어 주세요.</p>'; $('tables').innerHTML = ''; return; }
       const overSum = sum > total;
@@ -663,7 +717,7 @@
       const k = +d.dataset.fcDel, n = Math.round(Number($('fcn').value)) || 1;
       for (let i = k; i < n; i++) KEYS.forEach((p) => { $(p + i).value = $(p + (i + 1)).value; });
       KEYS.forEach((p) => { const el = $(p + n); el.value = p === 'fcc' ? '0' : p === 'fcx' ? '10' : ''; });
-      $('fcn').value = Math.max(1, n - 1); fire(); toast(`선수 ${k}을(를) 뺐어요`);
+      $('fcn').value = Math.max(1, n - 1); fire(); toast(`쿠폰 사용 선수 ${k}을(를) 뺐어요`);
     });
   }
 

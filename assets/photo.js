@@ -57,7 +57,7 @@
     ctx.drawImage(src, 0, 0);
     const w = lw(), dot = (p, c, label) => { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p[0], p[1], w * 3.2, 0, 7); ctx.fill(); ctx.fillStyle = c; ctx.beginPath(); ctx.arc(p[0], p[1], w * 2.2, 0, 7); ctx.fill(); if (label) text(label, [p[0] + w * 3.5, p[1] - w * 3.5]); };
     const line = (a, b, c, dash) => { ctx.setLineDash(dash ? [w * 3, w * 2] : []); ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]); };
-    const text = (t, p) => { ctx.font = `600 ${Math.round(w * 7)}px "IBM Plex Sans KR", sans-serif`; ctx.lineWidth = w * 1.8; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(t, p[0], p[1]); ctx.fillStyle = '#111827'; ctx.fillText(t, p[0], p[1]); };
+    const text = (t, p) => { ctx.font = `600 ${Math.round(w * 7)}px "Pretendard Variable", sans-serif`; ctx.lineWidth = w * 1.8; ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.strokeText(t, p[0], p[1]); ctx.fillStyle = '#111827'; ctx.fillText(t, p[0], p[1]); };
     if (mode === 'slope') {
       const M = '#0e7490';
       if (pts.length === 2) { const [a, b] = pts[0][0] <= pts[1][0] ? pts : [pts[1], pts[0]], up = b[1] < a[1]; line(a, [b[0], a[1]], '#d97706', true); line(a, b, M); text('수평', [a[0] + (b[0] - a[0]) * 0.55, a[1] + w * 9 * (up ? 1 : -0.4)]); }
