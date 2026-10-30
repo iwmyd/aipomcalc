@@ -220,6 +220,18 @@ details[open] > summary::after { content: '−'; }
 .guide p { margin: 0 0 10px; }
 .guide ul, .guide ol { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink2); }
 .guide li { margin: 0 0 4px; }
+/* 가이드(해설형 글) 페이지 — /guide/ */
+.art h2 { font-size: 1.12rem; margin: 26px 0 8px; scroll-margin-top: 120px; } .art h2:first-child { margin-top: 0; }
+.art-meta { color: var(--muted); font-size: .85rem; margin: -4px 0 10px; }
+.toc { margin: 0 0 16px; } .toc ol { margin: 6px 0 0; padding-left: 1.3em; } .toc li { margin: 2px 0; }
+.art-tbl { margin: 8px 0 14px; max-height: none; } .art-tbl table { width: 100%; min-width: 440px; border-collapse: collapse; font-size: .9rem; }
+.art-tbl th, .art-tbl td { padding: 8px 10px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; } .art-tbl th:first-child, .art-tbl td:first-child { text-align: left; white-space: normal; }
+.art-tbl thead th { border-top: 0; background: var(--bg2, transparent); } .art-tbl tr.now td { font-weight: 700; }
+.art-cta { margin: 18px 0 12px; }
+.guide-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 12px; }
+@media (max-width: 640px) { .guide-list { grid-template-columns: minmax(0, 1fr); } }
+.guide-item { margin: 0; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; } .guide-item b { color: var(--ink); line-height: 1.45; }
+.guide-item span { color: var(--ink2); font-size: .9rem; line-height: 1.6; } .guide-item small { color: var(--muted); font-size: .8rem; }
 
 /* 기본·공학 계산기 */
 .pad-wrap { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 16px; align-items: start; }
