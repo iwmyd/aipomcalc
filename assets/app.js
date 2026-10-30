@@ -117,9 +117,10 @@
     fit(); let rf; addEventListener('resize', () => { clearTimeout(rf); rf = setTimeout(fit, 160); });
   }
 
-  // 문의하기: 계산기 페이지의 "알려 주세요"(?calc=slug)로 왔으면 관련 계산기를 미리 골라 둔다
+  // 문의하기: 계산기 페이지의 "알려 주세요"(#calc=slug)로 왔으면 관련 계산기를 미리 골라 둔다
+  // (예전 ?calc= 링크도 읽음 — 쿼리 주소는 구글이 "대체 페이지"로 따로 수집해서 2026-10-30 # 으로 바꿈)
   if (page === 'contact') {
-    const slug = new URLSearchParams(location.search).get('calc'), sel = $('c-calc');
+    const slug = new URLSearchParams(location.hash.slice(1)).get('calc') || new URLSearchParams(location.search).get('calc'), sel = $('c-calc');
     const o = slug && sel && qs(`option[data-slug="${CSS.escape(slug)}"]`, sel);
     if (o) { sel.value = o.value; $('c-kind').value = '계산 오류 제보'; }
   }

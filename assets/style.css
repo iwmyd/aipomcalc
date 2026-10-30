@@ -213,6 +213,13 @@ details[open] > summary::after { content: '−'; }
 .faq p { margin: 0 0 12px; color: var(--ink2); font-size: .92rem; }
 .related h2 { font-size: 1.05rem; margin: 24px 0 12px; }
 .prose h2 { font-size: 1.05rem; margin: 18px 0 6px; } .prose p { margin: 0; color: var(--ink2); }
+/* 계산기 해설 글 (2026-10-30) — 읽는 글이라 줄 간격·문단 간격을 넉넉히 */
+.guide { margin: 0 0 16px; line-height: 1.75; }
+.guide h2 { margin: 0 0 4px; font-size: 1.1rem; }
+.guide h3 { font-size: 1rem; margin: 20px 0 6px; color: var(--ink); }
+.guide p { margin: 0 0 10px; }
+.guide ul, .guide ol { margin: 0 0 10px; padding-left: 1.3em; color: var(--ink2); }
+.guide li { margin: 0 0 4px; }
 
 /* 기본·공학 계산기 */
 .pad-wrap { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 16px; align-items: start; }
