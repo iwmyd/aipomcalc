@@ -214,6 +214,7 @@
 
   // ───────────── 2026 기준값 (출처: 각 계산기 페이지 "계산 기준") ─────────────
   const Y2026 = {
+    year: 2026,
     pension: 0.0475, pensionMin: 410000, pensionMax: 6590000, // 국민연금 근로자 4.75%, 기준소득월액 하·상한
     health: 0.03595, care: 0.1314, employ: 0.009,             // 건강보험 근로자 3.595%, 장기요양 = 건보료×13.14%, 고용보험 0.9%
     employBoss: 0.0025,                                       // 고용안정·직업능력개발(회사만, 150인 미만 0.25%)
@@ -221,6 +222,12 @@
     minWage: 10320,                                           // 2026 최저임금(시간급)
     ubMax: 68100, ubRate: 0.6, ubMinRatio: 0.8,               // 구직급여 1일 상한, 평균임금 60%, 하한 = 최저임금 80%
   };
+  // 2027 기준값 — 확정된 값만 덮어쓴다. 시행 전이라 아직 CUR 에 쓰지 않는다.
+  // 출처: 장기요양 13.90% 보건복지부 2026-10-30 / 국민연금 10%(근로자 5.0%) 보건복지부 연금개혁 / 최저임금 10,700원 고용노동부 고시 제2026-60호
+  // 미확정(시행령 공포·공식 발표 확인 후 여기에 추가): 고용보험 근로자 1.0%(employ), 구직급여 1일 상한(ubMax)
+  const Y2027 = { ...Y2026, year: 2027, pension: 0.05, care: 0.139, minWage: 10700 };
+  // 지금 적용하는 연도(급여·시급·실업급여). 시행 뒤 이 한 줄과 화면 문구를 바꾼다. 연말정산(yearEnd)은 귀속 연도라 Y2026 고정.
+  const CUR = Y2026;
   const floor10 = (v) => Math.floor(Math.round(v) / 10) * 10; // 소수 오차 정리 후 10원 미만 절사
 
   /** 근로소득세(연) — 소득세법 기본세율·근로소득공제·근로소득세액공제·자녀세액공제·표준세액공제 13만 원. 간이세액표의 추정치 */
@@ -238,10 +245,10 @@
     return Math.max(0, calc - credit - kidCredit - 130000);
   }
   /** 연봉 실수령액 (월). nonTax: 월 비과세(식대 등) */
-  function salary(annual, nonTax, family, kids) {
+  function salary(annual, nonTax, family, kids, Y = CUR) {
     const gross = annual / 12, taxable = Math.max(0, gross - nonTax);
-    const pension = floor10(Math.min(Math.max(taxable, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension);
-    const health = floor10(taxable * Y2026.health), care = floor10(health * Y2026.care), employ = floor10(taxable * Y2026.employ);
+    const pension = floor10(Math.min(Math.max(taxable, Y.pensionMin), Y.pensionMax) * Y.pension);
+    const health = floor10(taxable * Y.health), care = floor10(health * Y.care), employ = floor10(taxable * Y.employ);
     const incomeTax = floor10(incomeTaxYear(taxable * 12, family, kids, pension * 12, (health + care + employ) * 12) / 12);
     const localTax = floor10(incomeTax * 0.1);
     const deduct = pension + health + care + employ + incomeTax + localTax;
@@ -269,7 +276,7 @@
     const weekHours = hoursPerDay * daysPerWeek;
     const holidayHours = opt && opt.juhyu === false ? 0 : juhyuHours(weekHours);
     const monthHours = Math.round(((weekHours + holidayHours) * 365) / 7 / 12);
-    const base = { weekHours, holidayHours, juhyuEligible: juhyuHours(weekHours) > 0, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < Y2026.minWage };
+    const base = { weekHours, holidayHours, juhyuEligible: juhyuHours(weekHours) > 0, weekPay: hourly * weekHours, holidayPay: hourly * holidayHours, weekTotal: hourly * (weekHours + holidayHours), monthHours, monthPay: hourly * monthHours, belowMin: hourly < CUR.minWage };
     return opt ? Object.assign(base, wageNet(hourly, hoursPerDay, daysPerWeek, holidayHours, monthHours, opt)) : base;
   }
   /** 시급 월급의 공제. opt: { tax: 'earned'(근로소득 간이세액) | 'biz'(사업소득 3.3%) | 'daily'(일용근로) | 'none',
@@ -286,22 +293,22 @@
   /** 세전 월급 → 4대보험·세금. dailyPay·workDays 는 일용직 세금(일 단위 계산)에만 쓴다 */
   function wageDeduct(gross, dailyPay, workDays, opt) {
     const ins = opt.tax !== 'biz' && opt.tax !== 'none';
-    const pension = ins && opt.pension ? floor10(Math.min(Math.max(gross, Y2026.pensionMin), Y2026.pensionMax) * Y2026.pension) : 0;
-    const health = ins && opt.health ? floor10(gross * Y2026.health) : 0, care = floor10(health * Y2026.care);
-    const employ = ins && opt.employ ? floor10(gross * Y2026.employ) : 0;
+    const pension = ins && opt.pension ? floor10(Math.min(Math.max(gross, CUR.pensionMin), CUR.pensionMax) * CUR.pension) : 0;
+    const health = ins && opt.health ? floor10(gross * CUR.health) : 0, care = floor10(health * CUR.care);
+    const employ = ins && opt.employ ? floor10(gross * CUR.employ) : 0;
     let incomeTax = 0, localTax = 0;
     if (opt.tax === 'earned') { incomeTax = floor10(incomeTaxYear(gross * 12, opt.family || 1, 0, pension * 12, (health + care + employ) * 12) / 12); localTax = floor10(incomeTax * 0.1); }
-    else if (opt.tax === 'biz') { incomeTax = floor10(gross * Y2026.bizTax); localTax = floor10(incomeTax * 0.1); }
+    else if (opt.tax === 'biz') { incomeTax = floor10(gross * CUR.bizTax); localTax = floor10(incomeTax * 0.1); }
     else if (opt.tax === 'daily') { // 일 단위: (일당 − 15만 원) × 6% × 45%(세액공제 55%), 1,000원 미만 소액부징수
-      const t = Math.floor(Math.max(0, dailyPay - Y2026.dailyDed) * 0.06 * 0.45);
+      const t = Math.floor(Math.max(0, dailyPay - CUR.dailyDed) * 0.06 * 0.45);
       const perDay = t < 1000 ? 0 : t, days = Math.max(0, workDays);
       incomeTax = floor10(perDay * days); localTax = floor10(Math.floor(perDay * 0.1) * days);
     }
     const deduct = pension + health + care + employ + incomeTax + localTax;
-    const boss = { pension, health, care, employ: ins && opt.employ ? floor10(gross * (Y2026.employ + Y2026.employBoss)) : 0 }; // 회사 부담(산재 별도)
+    const boss = { pension, health, care, employ: ins && opt.employ ? floor10(gross * (CUR.employ + CUR.employBoss)) : 0 }; // 회사 부담(산재 별도)
     const rate = opt.probation ? opt.hourly * 0.9 : opt.hourly;
     return { gross, pension, health, care, employ, incomeTax, localTax, deduct, net: gross - deduct, boss,
-      bossTotal: boss.pension + boss.health + boss.care + boss.employ, rateBelowMin: rate < Y2026.minWage * (opt.probation ? 0.9 : 1) };
+      bossTotal: boss.pension + boss.health + boss.care + boss.employ, rateBelowMin: rate < CUR.minWage * (opt.probation ? 0.9 : 1) };
   }
   /** 휴일·주말 근무 가산(평소 시급 외에 더 받는 시간). mul: '1' 없음 | 'law' 1.5배·8시간 넘는 부분 2배(근로기준법 제56조 제2항) | '2' 2배 */
   function extraHours(mul, h) { return mul === 'law' ? 0.5 * Math.min(h, 8) + Math.max(0, h - 8) : mul === '2' ? h : 0; }
@@ -320,7 +327,7 @@
     const workPay = rate * workHours, premiumPay = rate * premiumHours, juhyuPay = rate * jh;
     const gross = Math.round(workPay + premiumPay + juhyuPay);
     return Object.assign({ rate, workDays, holidayDays: hol, weekendDays: wkd, workHours, premiumHours, juhyuHoursMonth: jh, juhyuEligible, eligibleWeeks, weekHours,
-      workPay, premiumPay, juhyuPay, monthHours: Math.round(workHours + jh), belowMin: hourly < Y2026.minWage },
+      workPay, premiumPay, juhyuPay, monthHours: Math.round(workHours + jh), belowMin: hourly < CUR.minWage },
       wageDeduct(gross, workDays ? (gross - juhyuPay) / workDays : 0, workDays, Object.assign({ hourly }, opt)));
   }
   /** 관공서 공휴일 — 우주항공청 2026·2027 월력요항 + 노동절·제헌절 공휴일 지정(2026.4). 달력 표시용, 해마다 새 월력요항으로 추가 */
@@ -368,14 +375,14 @@
   }
 
   /** 실업급여(구직급여): 1일 = 평균임금일액×60% (상한 68,100, 하한 = 최저임금×80%×1일 소정근로시간). 소정급여일수 = 고용보험법 별표1 */
-  function unemployment(dailyAvgWage, hoursPerDay, insuredYears, over50OrDisabled) {
-    const lower = Y2026.minWage * Y2026.ubMinRatio * Math.min(8, hoursPerDay);
-    const raw = dailyAvgWage * Y2026.ubRate;
-    const daily = Math.floor(Math.min(Y2026.ubMax, Math.max(lower, raw)));
+  function unemployment(dailyAvgWage, hoursPerDay, insuredYears, over50OrDisabled, Y = CUR) {
+    const lower = Y.minWage * Y.ubMinRatio * Math.min(8, hoursPerDay);
+    const raw = dailyAvgWage * Y.ubRate;
+    const daily = Math.floor(Math.max(lower, Math.min(Y.ubMax, raw))); // 하한이 상한보다 높아지면 하한 우선
     const T = over50OrDisabled ? [120, 180, 210, 240, 270] : [120, 150, 180, 210, 240];
     const i = insuredYears < 1 ? 0 : insuredYears < 3 ? 1 : insuredYears < 5 ? 2 : insuredYears < 10 ? 3 : 4;
     const days = T[i];
-    return { daily, days, total: daily * days, lower, capped: raw > Y2026.ubMax, floored: raw < lower, monthly: daily * 30 };
+    return { daily, days, total: daily * days, lower, capped: raw > Y.ubMax, floored: raw < lower, monthly: daily * 30 };
   }
 
   /** 육아휴직 급여 (고용보험법 시행령 제95조, 2025.1.1~ 시행분 — 고용24 안내 2025-09-15 확인). 월 통상임금 기준, 하한 월 70만 원.
@@ -710,7 +717,7 @@
   }
 
   const api = { winRate, loan, deposit, savings, prepayFee, severance, rentConvert, dsr, installment, military, MILITARY, dday, addDays, age, toPyeong, toM2, compound, evaluate, carLoan, carTax,
-    Y2026, salary, incomeTaxYear, percent, vat, wage, wageMonth, wageCalendar, HOLIDAYS, HOLIDAY_YEARS, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
+    Y2026, Y2027, CUR, salary, incomeTaxYear, percent, vat, wage, wageMonth, wageCalendar, HOLIDAYS, HOLIDAY_YEARS, charCount, avgPrice, unemployment, refinance, carAcqTax, subscription, goal, bmi,
     annualLeave, leaveGrant, addMonthsYmd, brokerage, BROKER, basicTax, freelanceTax, electricity, ELEC,
     PY, shapeArea, parsePts, solidVolume, CONC_LOSS, concrete, REBAR, rebar, BRICK, brick, slope, stairs, STAIR_RULE, earthwork, UNITS, convert,
     FC_COUPONS, fcFee, parseBP, parentalLeave, homeAcqTax, yearEnd, cardDeduction, korBP };

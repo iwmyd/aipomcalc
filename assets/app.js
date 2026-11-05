@@ -394,7 +394,7 @@
         : [['월 실수령액', won(x.net), 'main'], ['월급(세전)', won(x.gross)], ['월 공제 합계', won(x.deduct)], ['주휴수당(주)', won(x.rate * x.holidayHours)], ['주급(주휴 포함)', won(x.rate * (x.weekHours + x.holidayHours))], ['월 환산 시간', x.monthHours + '시간'], ['주 근무 시간', x.weekHours + '시간'], ['주휴 시간', +x.holidayHours.toFixed(2) + '시간']];
       const juhyuOff = $('juhyu').value === '0';
       $('out').innerHTML = kpi(head) +
-        (x.rateBelowMin ? `<p class="note over">${num('hourly') < Calc.Y2026.minWage ? '입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.' : '수습 감액 후 시급이 최저임금의 90%(9,288원)보다 낮습니다.'}</p>` : x.belowMin ? '<p class="note over">입력한 시급이 2026년 최저임금(10,320원)보다 낮습니다.</p>' : '') +
+        (x.rateBelowMin ? `<p class="note over">${num('hourly') < Calc.CUR.minWage ? `입력한 시급이 ${Calc.CUR.year}년 최저임금(${Calc.CUR.minWage.toLocaleString('ko-KR')}원)보다 낮습니다.` : `수습 감액 후 시급이 최저임금의 90%(${Math.round(Calc.CUR.minWage * 0.9).toLocaleString('ko-KR')}원)보다 낮습니다.`}</p>` : x.belowMin ? `<p class="note over">입력한 시급이 ${Calc.CUR.year}년 최저임금(${Calc.CUR.minWage.toLocaleString('ko-KR')}원)보다 낮습니다.</p>` : '') +
         (juhyuOff && x.juhyuEligible ? '<p class="note">주 15시간 이상이라 원칙적으로 주휴수당 대상입니다(개근한 주). 받지 않음으로 계산했습니다.</p>' : !juhyuOff && !x.juhyuEligible ? `<p class="note">${mode === 'cal' ? '주 15시간 이상인 주가 없어' : '주 15시간 미만이라'} 주휴수당이 없습니다.</p>` : '') +
         (mode === 'cal' && x.eligibleWeeks ? `<p class="note">주휴수당: 15시간 이상인 주 ${x.eligibleWeeks}개 (일요일이 이 달에 있는 주 기준)</p>` : '') +
         (monthIn && (x.holidayDays || x.weekendDays) ? `<p class="note">공휴일 ${x.holidayDays}일 · 주말 ${x.weekendDays}일 근무${x.premiumPay ? ` → 가산 ${won(x.premiumPay)}` : ' (가산 없음으로 계산)'}</p>` : '') +
