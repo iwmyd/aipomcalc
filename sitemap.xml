@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-<url><loc>https://aipomcalc.com/</loc><lastmod>2026-11-06</lastmod></url>
+<url><loc>https://aipomcalc.com/</loc><lastmod>2026-11-10</lastmod></url>
 <url><loc>https://aipomcalc.com/about/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/privacy/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/basic/</loc><lastmod>2026-11-03</lastmod></url>
@@ -34,8 +34,8 @@
 <url><loc>https://aipomcalc.com/winrate/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/annual-leave/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/brokerage/</loc><lastmod>2026-11-03</lastmod></url>
-<url><loc>https://aipomcalc.com/freelance-tax/</loc><lastmod>2026-11-03</lastmod></url>
-<url><loc>https://aipomcalc.com/electricity/</loc><lastmod>2026-11-03</lastmod></url>
+<url><loc>https://aipomcalc.com/freelance-tax/</loc><lastmod>2026-11-10</lastmod></url>
+<url><loc>https://aipomcalc.com/electricity/</loc><lastmod>2026-11-10</lastmod></url>
 <url><loc>https://aipomcalc.com/area-volume/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/materials/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/slope/</loc><lastmod>2026-11-03</lastmod></url>
@@ -65,7 +65,7 @@
 <url><loc>https://aipomcalc.com/loan/10000/</loc><lastmod>2026-11-06</lastmod></url>
 <url><loc>https://aipomcalc.com/loan/20000/</loc><lastmod>2026-11-06</lastmod></url>
 <url><loc>https://aipomcalc.com/loan/30000/</loc><lastmod>2026-11-06</lastmod></url>
-<url><loc>https://aipomcalc.com/guide/</loc><lastmod>2026-11-06</lastmod></url>
+<url><loc>https://aipomcalc.com/guide/</loc><lastmod>2026-11-10</lastmod></url>
 <url><loc>https://aipomcalc.com/guide/year-end-tax-2026/</loc><lastmod>2026-11-06</lastmod></url>
 <url><loc>https://aipomcalc.com/guide/loan-repayment/</loc><lastmod>2026-11-06</lastmod></url>
 <url><loc>https://aipomcalc.com/guide/take-home-pay/</loc><lastmod>2026-11-03</lastmod></url>
@@ -78,4 +78,6 @@
 <url><loc>https://aipomcalc.com/guide/subscription-score/</loc><lastmod>2026-11-03</lastmod></url>
 <url><loc>https://aipomcalc.com/guide/savings-interest-tax/</loc><lastmod>2026-11-06</lastmod></url>
 <url><loc>https://aipomcalc.com/guide/jeonse-to-wolse/</loc><lastmod>2026-11-06</lastmod></url>
+<url><loc>https://aipomcalc.com/guide/freelance-tax-refund/</loc><lastmod>2026-11-10</lastmod></url>
+<url><loc>https://aipomcalc.com/guide/electricity-progressive/</loc><lastmod>2026-11-10</lastmod></url>
 </urlset>
